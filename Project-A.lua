@@ -629,82 +629,90 @@ PickToggle:OnChanged(function()
             local function grabPack(item)
                 if pickedPacks[item] then return end
                 pickedPacks[item] = true
-                local lp = game.Players.LocalPlayer
-                local char = lp and lp.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                local tp = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)) or item
-                if hrp and tp and tp:IsA("BasePart") then
-                    BypassTeleport(hrp, tp.CFrame)
-                end
-                pcall(function() Networking.SeedPack.ClickPack:Fire(item) end)
-                local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
-                if prompt then fireproximityprompt(prompt) end
-                if hrp and firetouchinterest and tp and tp:IsA("BasePart") then
-                    firetouchinterest(hrp, tp, 0)
-                    firetouchinterest(hrp, tp, 1)
-                end
+                task.spawn(function()
+                    pcall(function()
+                        local lp = game.Players.LocalPlayer
+                        local char = lp and lp.Character
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        if not hrp then return end
+                        local tp = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)) or item
+                        if tp and tp:IsA("BasePart") then
+                            hrp.CFrame = tp.CFrame
+                            task.wait(0.05)
+                        end
+                        Networking.SeedPack.ClickPack:Fire(item)
+                        local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        if prompt then
+                            fireproximityprompt(prompt)
+                        end
+                        if hrp and firetouchinterest and tp and tp:IsA("BasePart") then
+                            firetouchinterest(hrp, tp, 0)
+                            task.wait(0.01)
+                            firetouchinterest(hrp, tp, 1)
+                        end
+                    end)
+                end)
             end
             local foldersToWatch = {
                 mapFolder:FindFirstChild("SeedPackSpawnClient"),
                 mapFolder:FindFirstChild("SeedPackSpawnServerLocations"),
             }
-            for _, folder in ipairs(foldersToWatch) do
+            for _, folder in next, foldersToWatch do
                 if folder then
-                    for _, item in ipairs(folder:GetChildren()) do
-                        task.spawn(grabPack, item)
+                    for _, item in next, folder:GetChildren() do
+                        grabPack(item)
                     end
                     local conn = folder.ChildAdded:Connect(function(item)
                         if Options.AutoPickEventToggle.Value and getgenv().Gag2RunningID == currentID then
-                            task.spawn(grabPack, item)
+                            grabPack(item)
                         end
                     end)
                     table.insert(_seedPackConnections, conn)
                 end
             end
-            local tickCounter = 0
             while Options.AutoPickEventToggle.Value and getgenv().Gag2RunningID == currentID do
                 pcall(function()
-                    for _, folder in ipairs(foldersToWatch) do
+                    for _, folder in next, foldersToWatch do
                         if folder then
-                            for _, item in ipairs(folder:GetChildren()) do
+                            for _, item in next, folder:GetChildren() do
                                 if not pickedPacks[item] then
-                                    task.spawn(grabPack, item)
+                                    grabPack(item)
                                 end
                             end
                         end
                     end
-                    tickCounter = tickCounter + 1
-                    if tickCounter >= 30 then
-                        tickCounter = 0
-                        local droppedItemsFolder = workspace:FindFirstChild("DroppedItems")
-                        if droppedItemsFolder then
-                            local hrp = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                            for _, item in ipairs(droppedItemsFolder:GetChildren()) do
-                                if hrp then
-                                    local tp = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)) or item
-                                    if tp and tp:IsA("BasePart") then
-                                        BypassTeleport(hrp, tp.CFrame)
-                                    end
+                    local droppedItemsFolder = workspace:FindFirstChild("DroppedItems")
+                    if droppedItemsFolder then
+                        local hrp = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            for _, item in next, droppedItemsFolder:GetChildren() do
+                                local tp = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)) or item
+                                if tp and tp:IsA("BasePart") then
+                                    hrp.CFrame = tp.CFrame
+                                    task.wait(0.05)
                                 end
                                 local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
-                                if prompt then fireproximityprompt(prompt) end
-                            end
-                        end
-                        for _, prompt in ipairs(workspace:GetDescendants()) do
-                            if prompt:IsA("ProximityPrompt") and prompt.Enabled then
-                                local text = string.lower(prompt.ActionText)
-                                if text == "collect" or text == "pick up" or text == "pickup" or text == "open" or text == "take" or text == "grab" or text == "dig" or text == "dig up" then
-                                    local hrp = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                                    if hrp and prompt.Parent and prompt.Parent:IsA("BasePart") then
-                                        BypassTeleport(hrp, prompt.Parent.CFrame)
-                                    end
+                                if prompt then
                                     fireproximityprompt(prompt)
                                 end
                             end
                         end
                     end
+                    for _, prompt in next, workspace:GetDescendants() do
+                        if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+                            local text = string.lower(prompt.ActionText)
+                            if text == "collect" or text == "pick up" or text == "pickup" or text == "open" or text == "take" or text == "grab" or text == "dig" or text == "dig up" then
+                                local hrp = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                                if hrp and prompt.Parent and prompt.Parent:IsA("BasePart") then
+                                    hrp.CFrame = prompt.Parent.CFrame
+                                    task.wait(0.05)
+                                end
+                                fireproximityprompt(prompt)
+                            end
+                        end
+                    end
                 end)
-                task.wait(0.3)
+                task.wait(0.1)
             end
         end)
     else
@@ -712,7 +720,7 @@ PickToggle:OnChanged(function()
             task.cancel(AutoPickEventTask)
             AutoPickEventTask = nil
         end
-        for _, conn in ipairs(_seedPackConnections) do
+        for _, conn in next, _seedPackConnections do
             pcall(function() conn:Disconnect() end)
         end
         _seedPackConnections = {}
