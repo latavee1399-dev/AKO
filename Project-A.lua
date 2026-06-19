@@ -103,6 +103,87 @@ Tabs.Main:AddParagraph({
     Title = "Grow A Garden 2 | By ChickChick",
     Content = "Welcome to ChickChick\n[Discord] ChickChick\nPower By Ao Pro Free"
 })
+
+local PetTrackerParagraph = Tabs.Main:AddParagraph({
+    Title = "🐾 Pets in Server (Real-time)",
+    Content = "Scanning for pets..."
+})
+
+task.spawn(function()
+    local PetEmojis = {
+        frog = "🐸", bunny = "🐰", owl = "🦉", deer = "🦌", robin = "🐦",
+        bee = "🐝", monkey = "🐵", dragon = "🐉", dragonfly = "✨",
+        unicorn = "🦄", raccoon = "🦝"
+    }
+
+    while getgenv().Gag2RunningID == currentID do
+        pcall(function()
+            local mapFolder = workspace:FindFirstChild("Map")
+            local spawnsFolder = mapFolder and mapFolder:FindFirstChild("WildPetSpawns")
+            local petList = {}
+
+            if spawnsFolder then
+                for _, obj in next, spawnsFolder:GetChildren() do
+                    if obj:IsA("Model") then
+                        local petName = obj:GetAttribute("PetName")
+                        if not petName or petName == "" then
+                            local parts = string.split(obj.Name, "_")
+                            petName = #parts >= 2 and parts[2] or obj.Name
+                        end
+
+                        local price = "N/A"
+                        local costTimer = obj:FindFirstChild("PetCostTimer", true)
+                        if costTimer then
+                            local label = costTimer:FindFirstChildWhichIsA("TextLabel")
+                            if label and label.Text ~= "" then
+                                price = label.Text
+                            end
+                        end
+
+                        local timeLeft = "N/A"
+                        local leaveTimer = obj:FindFirstChild("PetLeaveTimer", true)
+                        if leaveTimer then
+                            local label = leaveTimer:FindFirstChildWhichIsA("TextLabel")
+                            if label and label.Text ~= "" then
+                                timeLeft = label.Text
+                            end
+                        end
+
+                        local emoji = "🐾"
+                        local lowerName = string.lower(petName)
+                        for key, em in next, PetEmojis do
+                            if string.find(lowerName, key) then
+                                emoji = em
+                                break
+                            end
+                        end
+
+                        table.insert(petList, {
+                            name = petName,
+                            emoji = emoji,
+                            price = price,
+                            time = timeLeft
+                        })
+                    end
+                end
+            end
+
+            if #petList > 0 then
+                local content = ""
+                for i, pet in next, petList do
+                    content = content .. pet.emoji .. " " .. pet.name .. "\n"
+                    content = content .. "💰 " .. pet.price .. " | ⏰ " .. pet.time
+                    if i < #petList then content = content .. "\n\n" end
+                end
+                PetTrackerParagraph:SetDesc(content)
+            else
+                PetTrackerParagraph:SetDesc("❌ No pets found in this server")
+            end
+        end)
+        task.wait(1)
+    end
+end)
+
 local function BypassTeleport(hrp, targetCFrame)
     pcall(function()
         local distance = (hrp.Position - targetCFrame.Position).Magnitude
