@@ -716,21 +716,59 @@ PickToggle:OnChanged(function()
                         local char = lp and lp.Character
                         local hrp = char and char:FindFirstChild("HumanoidRootPart")
                         if not hrp then return end
+
+                        -- หา part ที่จะวาร์ปไป
                         local tp = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)) or item
-                        if tp and tp:IsA("BasePart") then
-                            hrp.CFrame = tp.CFrame
-                            task.wait(0.05)
+                        if not tp or not tp:IsA("BasePart") then return end
+
+                        -- ลองเก็บหลายรอบเพื่อให้แน่ใจว่าได้
+                        for attempt = 1, 3 do
+                            -- วาร์ปไปที่เมล็ดพร้อมออฟเซ็ตเล็กน้อย
+                            BypassTeleport(hrp, tp.CFrame * CFrame.new(0, 2, 0))
+                            task.wait(0.3)
+
+                            -- ลองทุกวิธีในการเก็บ
+                            -- วิธีที่ 1: Fire Networking
+                            Networking.SeedPack.ClickPack:Fire(item)
+                            task.wait(0.1)
+
+                            -- วิธีที่ 2: ProximityPrompt
+                            local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
+                            if prompt and prompt.Enabled then
+                                local oldHold = prompt.HoldDuration
+                                prompt.HoldDuration = 0
+                                fireproximityprompt(prompt)
+                                task.wait(0.1)
+                                prompt.HoldDuration = oldHold
+                            end
+
+                            -- วิธีที่ 3: Touch Interest (ทำหลายรอบ)
+                            if hrp and firetouchinterest and tp then
+                                for _ = 1, 5 do
+                                    firetouchinterest(hrp, tp, 0)
+                                    task.wait(0.05)
+                                    firetouchinterest(hrp, tp, 1)
+                                    task.wait(0.05)
+                                end
+                            end
+
+                            -- รอให้มีเวลาเก็บ
+                            task.wait(0.3)
+
+                            -- ถ้าไอเทมหายแล้ว แสดงว่าเก็บได้แล้ว
+                            if not item or not item.Parent then
+                                break
+                            end
+
+                            -- ถ้ายังไม่ได้ ลองวาร์ปใกล้ขึ้นในรอบถัดไป
+                            if attempt < 3 then
+                                hrp.CFrame = tp.CFrame
+                                task.wait(0.2)
+                            end
                         end
-                        Networking.SeedPack.ClickPack:Fire(item)
-                        local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
-                        if prompt then
-                            fireproximityprompt(prompt)
-                        end
-                        if hrp and firetouchinterest and tp and tp:IsA("BasePart") then
-                            firetouchinterest(hrp, tp, 0)
-                            task.wait(0.01)
-                            firetouchinterest(hrp, tp, 1)
-                        end
+
+                        -- รอเพิ่มเติมเผื่อการเก็บยังไม่เสร็จ
+                        task.wait(0.5)
                     end)
                 end)
             end
@@ -769,12 +807,31 @@ PickToggle:OnChanged(function()
                             for _, item in next, droppedItemsFolder:GetChildren() do
                                 local tp = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)) or item
                                 if tp and tp:IsA("BasePart") then
-                                    hrp.CFrame = tp.CFrame
-                                    task.wait(0.05)
-                                end
-                                local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
-                                if prompt then
-                                    fireproximityprompt(prompt)
+                                    -- วาร์ปไปที่ไอเทม
+                                    BypassTeleport(hrp, tp.CFrame * CFrame.new(0, 2, 0))
+                                    task.wait(0.3)
+
+                                    -- ลองเก็บหลายวิธี
+                                    local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                    if prompt and prompt.Enabled then
+                                        local oldHold = prompt.HoldDuration
+                                        prompt.HoldDuration = 0
+                                        fireproximityprompt(prompt)
+                                        task.wait(0.1)
+                                        prompt.HoldDuration = oldHold
+                                    end
+
+                                    -- ลอง touch interest
+                                    if firetouchinterest then
+                                        for _ = 1, 3 do
+                                            firetouchinterest(hrp, tp, 0)
+                                            task.wait(0.05)
+                                            firetouchinterest(hrp, tp, 1)
+                                            task.wait(0.05)
+                                        end
+                                    end
+
+                                    task.wait(0.3)
                                 end
                             end
                         end
@@ -785,10 +842,29 @@ PickToggle:OnChanged(function()
                             if text == "collect" or text == "pick up" or text == "pickup" or text == "open" or text == "take" or text == "grab" or text == "dig" or text == "dig up" then
                                 local hrp = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                                 if hrp and prompt.Parent and prompt.Parent:IsA("BasePart") then
-                                    hrp.CFrame = prompt.Parent.CFrame
-                                    task.wait(0.05)
+                                    -- วาร์ปไปที่ prompt
+                                    BypassTeleport(hrp, prompt.Parent.CFrame * CFrame.new(0, 2, 0))
+                                    task.wait(0.3)
+
+                                    -- ปิด hold duration และเก็บ
+                                    local oldHold = prompt.HoldDuration
+                                    prompt.HoldDuration = 0
+                                    fireproximityprompt(prompt)
+                                    task.wait(0.1)
+                                    prompt.HoldDuration = oldHold
+
+                                    -- ลอง touch interest ด้วย
+                                    if firetouchinterest then
+                                        for _ = 1, 3 do
+                                            firetouchinterest(hrp, prompt.Parent, 0)
+                                            task.wait(0.05)
+                                            firetouchinterest(hrp, prompt.Parent, 1)
+                                            task.wait(0.05)
+                                        end
+                                    end
+
+                                    task.wait(0.2)
                                 end
-                                fireproximityprompt(prompt)
                             end
                         end
                     end
