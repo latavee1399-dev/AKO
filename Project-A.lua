@@ -1602,12 +1602,28 @@ BuyPetToggle:OnChanged(function()
                     if not hrp then return end
                     for _, obj in ipairs(workspace:GetDescendants()) do
                         local petNameMatch = nil
+
+                        -- Get actual pet name from object
+                        local actualPetName = obj:GetAttribute("PetName")
+                        if not actualPetName or actualPetName == "" then
+                            -- Fallback to parsing from obj.Name
+                            if string.find(obj.Name, "_") then
+                                local parts = string.split(obj.Name, "_")
+                                actualPetName = #parts >= 2 and parts[2] or obj.Name
+                            else
+                                actualPetName = obj.Name
+                            end
+                        end
+
+                        -- Match selected pets with actual pet name (exact match)
+                        local lowerActual = string.lower(actualPetName)
                         for tPet, _ in pairs(targetPets) do
-                            if string.find(string.lower(obj.Name), string.lower(tPet)) then
+                            if lowerActual == string.lower(tPet) then
                                 petNameMatch = tPet
                                 break
                             end
                         end
+
                         if (obj:IsA("Model") or obj:IsA("BasePart")) and petNameMatch then
                             local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
                             if prompt and prompt.Enabled then
