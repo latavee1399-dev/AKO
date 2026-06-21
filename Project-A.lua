@@ -717,34 +717,40 @@ PickToggle:OnChanged(function()
                         local hrp = char and char:FindFirstChild("HumanoidRootPart")
                         if not hrp then return end
 
-                        -- หา part ที่จะวาร์ปไป
                         local tp = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)) or item
                         if not tp or not tp:IsA("BasePart") then return end
 
-                        -- ลองเก็บหลายรอบเพื่อให้แน่ใจว่าได้
-                        for attempt = 1, 3 do
-                            -- วาร์ปไปที่เมล็ดพร้อมออฟเซ็ตเล็กน้อย
-                            BypassTeleport(hrp, tp.CFrame * CFrame.new(0, 2, 0))
-                            task.wait(0.3)
+                        local positions = {
+                            CFrame.new(0, 0, 0),      
+                            CFrame.new(0, -1, 0),     
+                            CFrame.new(1, 0, 0),      
+                            CFrame.new(-1, 0, 0),
+                            CFrame.new(0, 0, 1),
+                            CFrame.new(0, 0, -1),
+                        }
 
-                            -- ลองทุกวิธีในการเก็บ
-                            -- วิธีที่ 1: Fire Networking
+                        for _, offset in ipairs(positions) do
+                            if not item or not item.Parent then break end
+
+                            hrp.CFrame = tp.CFrame * offset
+                            task.wait(0.5)
+
                             Networking.SeedPack.ClickPack:Fire(item)
                             task.wait(0.1)
 
-                            -- วิธีที่ 2: ProximityPrompt
                             local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
                             if prompt and prompt.Enabled then
                                 local oldHold = prompt.HoldDuration
                                 prompt.HoldDuration = 0
-                                fireproximityprompt(prompt)
-                                task.wait(0.1)
+                                for _ = 1, 5 do
+                                    fireproximityprompt(prompt)
+                                    task.wait(0.1)
+                                end
                                 prompt.HoldDuration = oldHold
                             end
 
-                            -- วิธีที่ 3: Touch Interest (ทำหลายรอบ)
                             if hrp and firetouchinterest and tp then
-                                for _ = 1, 5 do
+                                for _ = 1, 10 do
                                     firetouchinterest(hrp, tp, 0)
                                     task.wait(0.05)
                                     firetouchinterest(hrp, tp, 1)
@@ -752,23 +758,12 @@ PickToggle:OnChanged(function()
                                 end
                             end
 
-                            -- รอให้มีเวลาเก็บ
-                            task.wait(0.3)
+                            task.wait(0.5)
 
-                            -- ถ้าไอเทมหายแล้ว แสดงว่าเก็บได้แล้ว
                             if not item or not item.Parent then
                                 break
                             end
-
-                            -- ถ้ายังไม่ได้ ลองวาร์ปใกล้ขึ้นในรอบถัดไป
-                            if attempt < 3 then
-                                hrp.CFrame = tp.CFrame
-                                task.wait(0.2)
-                            end
                         end
-
-                        -- รอเพิ่มเติมเผื่อการเก็บยังไม่เสร็จ
-                        task.wait(0.5)
                     end)
                 end)
             end
@@ -807,11 +802,9 @@ PickToggle:OnChanged(function()
                             for _, item in next, droppedItemsFolder:GetChildren() do
                                 local tp = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)) or item
                                 if tp and tp:IsA("BasePart") then
-                                    -- วาร์ปไปที่ไอเทม
                                     BypassTeleport(hrp, tp.CFrame * CFrame.new(0, 2, 0))
                                     task.wait(0.3)
 
-                                    -- ลองเก็บหลายวิธี
                                     local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
                                     if prompt and prompt.Enabled then
                                         local oldHold = prompt.HoldDuration
@@ -821,7 +814,6 @@ PickToggle:OnChanged(function()
                                         prompt.HoldDuration = oldHold
                                     end
 
-                                    -- ลอง touch interest
                                     if firetouchinterest then
                                         for _ = 1, 3 do
                                             firetouchinterest(hrp, tp, 0)
@@ -842,18 +834,15 @@ PickToggle:OnChanged(function()
                             if text == "collect" or text == "pick up" or text == "pickup" or text == "open" or text == "take" or text == "grab" or text == "dig" or text == "dig up" then
                                 local hrp = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                                 if hrp and prompt.Parent and prompt.Parent:IsA("BasePart") then
-                                    -- วาร์ปไปที่ prompt
                                     BypassTeleport(hrp, prompt.Parent.CFrame * CFrame.new(0, 2, 0))
                                     task.wait(0.3)
 
-                                    -- ปิด hold duration และเก็บ
                                     local oldHold = prompt.HoldDuration
                                     prompt.HoldDuration = 0
                                     fireproximityprompt(prompt)
                                     task.wait(0.1)
                                     prompt.HoldDuration = oldHold
 
-                                    -- ลอง touch interest ด้วย
                                     if firetouchinterest then
                                         for _ = 1, 3 do
                                             firetouchinterest(hrp, prompt.Parent, 0)
@@ -1657,6 +1646,7 @@ BuyPetToggle:OnChanged(function()
     if Options.AutoBuyPetToggle.Value then
         AutoBuyPetTask = task.spawn(function()
             local PlayerStateClient = require(game:GetService("ReplicatedStorage").ClientModules.PlayerStateClient)
+            local boughtPets = {}
             while Options.AutoBuyPetToggle.Value and getgenv().Gag2RunningID == currentID do
                 pcall(function()
                     local selectedPets = Options.SelectPetToBuy.Value
@@ -1676,50 +1666,108 @@ BuyPetToggle:OnChanged(function()
                     local char = lp.Character
                     local hrp = char and char:FindFirstChild("HumanoidRootPart")
                     if not hrp then return end
-                    for _, obj in ipairs(workspace:GetDescendants()) do
-                        local petNameMatch = nil
 
-                        -- Get actual pet name from object
-                        local actualPetName = obj:GetAttribute("PetName")
-                        if not actualPetName or actualPetName == "" then
-                            -- Fallback to parsing from obj.Name
-                            if string.find(obj.Name, "_") then
-                                local parts = string.split(obj.Name, "_")
-                                actualPetName = #parts >= 2 and parts[2] or obj.Name
-                            else
-                                actualPetName = obj.Name
-                            end
-                        end
+                    -- ค้นหาสัตว์เลี้ยงในแมพ
+                    local mapFolder = workspace:FindFirstChild("Map")
+                    local spawnsFolder = mapFolder and mapFolder:FindFirstChild("WildPetSpawns")
 
-                        -- Match selected pets with actual pet name (exact match)
-                        local lowerActual = string.lower(actualPetName)
-                        for tPet, _ in pairs(targetPets) do
-                            if lowerActual == string.lower(tPet) then
-                                petNameMatch = tPet
-                                break
-                            end
-                        end
+                    if spawnsFolder then
+                        for _, obj in ipairs(spawnsFolder:GetChildren()) do
+                            if not Options.AutoBuyPetToggle.Value then break end
 
-                        if (obj:IsA("Model") or obj:IsA("BasePart")) and petNameMatch then
-                            local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-                            if prompt and prompt.Enabled then
-                                local targetCFrame = obj:IsA("Model") and (obj.PrimaryPart and obj.PrimaryPart.CFrame or obj:GetModelCFrame()) or obj.CFrame
-                                if targetCFrame then
-                                    hrp.CFrame = targetCFrame
-                                    task.wait(0.3)
-                                    local oldHold = prompt.HoldDuration
-                                    prompt.HoldDuration = 0
-                                    fireproximityprompt(prompt)
-                                    task.wait(0.1)
-                                    prompt.HoldDuration = oldHold
-                                    task.wait(0.5)
-                                    local plotId = lp:GetAttribute("PlotId")
-                                    if plotId then
-                                        local plot = workspace.Gardens:FindFirstChild("Plot" .. tostring(plotId))
-                                        if plot then
-                                            local plotCFrame = plot.PrimaryPart and plot.PrimaryPart.CFrame or plot:GetModelCFrame()
-                                            hrp.CFrame = plotCFrame + Vector3.new(0, 10, 0)
+                            if obj:IsA("Model") and not boughtPets[obj] then
+                                local petNameMatch = nil
+
+                                -- Get actual pet name from object
+                                local actualPetName = obj:GetAttribute("PetName")
+                                if not actualPetName or actualPetName == "" then
+                                    if string.find(obj.Name, "_") then
+                                        local parts = string.split(obj.Name, "_")
+                                        actualPetName = #parts >= 2 and parts[2] or obj.Name
+                                    else
+                                        actualPetName = obj.Name
+                                    end
+                                end
+
+                                -- Match selected pets with actual pet name
+                                local lowerActual = string.lower(actualPetName)
+                                for tPet, _ in pairs(targetPets) do
+                                    if lowerActual == string.lower(tPet) then
+                                        petNameMatch = tPet
+                                        break
+                                    end
+                                end
+
+                                if petNameMatch then
+                                    local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                    if prompt and prompt.Enabled then
+                                        boughtPets[obj] = true
+
+                                        -- หา part สำหรับวาร์ป
+                                        local targetPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
+                                        if targetPart then
+                                            -- ลองซื้อหลายรอบ และหลายตำแหน่ง
+                                            local positions = {
+                                                CFrame.new(0, 0, 0),      -- ติดกับสัตว์
+                                                CFrame.new(0, -2, 0),     -- ใต้สัตว์
+                                                CFrame.new(2, 0, 0),      -- ข้างๆ
+                                                CFrame.new(-2, 0, 0),
+                                                CFrame.new(0, 0, 2),
+                                                CFrame.new(0, 0, -2),
+                                            }
+
+                                            for _, offset in ipairs(positions) do
+                                                if not obj or not obj.Parent then break end
+
+                                                -- วาร์ปไปที่ตำแหน่งนี้
+                                                hrp.CFrame = targetPart.CFrame * offset
+                                                task.wait(0.8)
+
+                                                -- ปิด hold duration
+                                                local oldHold = prompt.HoldDuration
+                                                prompt.HoldDuration = 0
+
+                                                -- ลองกดหลายครั้ง
+                                                for i = 1, 10 do
+                                                    fireproximityprompt(prompt)
+                                                    task.wait(0.2)
+                                                end
+
+                                                -- ลอง touch interest
+                                                if firetouchinterest then
+                                                    for _ = 1, 10 do
+                                                        firetouchinterest(hrp, targetPart, 0)
+                                                        task.wait(0.1)
+                                                        firetouchinterest(hrp, targetPart, 1)
+                                                        task.wait(0.1)
+                                                    end
+                                                end
+
+                                                prompt.HoldDuration = oldHold
+                                                task.wait(1)
+
+                                                -- ตรวจสอบว่าสัตว์หายไปหรือยัง
+                                                if not obj or not obj.Parent or not prompt.Enabled then
+                                                    Fluent:Notify({Title = "สำเร็จ!", Content = "ซื้อ " .. actualPetName .. " สำเร็จแล้ว!", Duration = 5})
+                                                    break
+                                                end
+                                            end
+
+                                            -- รอก่อนวาร์ปกลับ
                                             task.wait(2)
+
+                                            -- วาร์ปกลับแปลง
+                                            local plotId = lp:GetAttribute("PlotId")
+                                            if plotId then
+                                                local plot = workspace.Gardens:FindFirstChild("Plot" .. tostring(plotId))
+                                                if plot then
+                                                    local plotPart = plot.PrimaryPart or plot:FindFirstChild("SpawnPoint") or plot:FindFirstChildWhichIsA("BasePart")
+                                                    if plotPart then
+                                                        hrp.CFrame = plotPart.CFrame * CFrame.new(0, 10, 0)
+                                                        task.wait(1)
+                                                    end
+                                                end
+                                            end
                                         end
                                     end
                                 end
@@ -1727,7 +1775,7 @@ BuyPetToggle:OnChanged(function()
                         end
                     end
                 end)
-                task.wait(3) 
+                task.wait(2)
             end
         end)
     else
@@ -1758,6 +1806,11 @@ HopPetToggle:OnChanged(function()
             local TeleportService = game:GetService("TeleportService")
             local Players = game:GetService("Players")
             local lp = Players.LocalPlayer
+
+            -- รอ 5 วินาทีก่อนเริ่ม
+            Fluent:Notify({Title = "Auto Hop", Content = "กำลังเตรียมตัว... รอ 5 วินาที", Duration = 5})
+            task.wait(5)
+
             while _hopPetRunning and getgenv().Gag2RunningID == currentID do
                 pcall(function()
                     local selectedPets = Options.SelectHopPet.Value
@@ -1773,6 +1826,7 @@ HopPetToggle:OnChanged(function()
                         targetPets[string.lower(selectedPets)] = selectedPets
                     end
                     if not next(targetPets) then return end
+
                     local mapFolder = workspace:FindFirstChild("Map")
                     local spawnsFolder = mapFolder and mapFolder:FindFirstChild("WildPetSpawns")
                     if spawnsFolder then
@@ -1796,23 +1850,57 @@ HopPetToggle:OnChanged(function()
                                 end
                                 if matched then
                                     _hopPetRunning = false
+                                    Fluent:Notify({Title = "พบสัตว์!", Content = "พบ " .. petName .. " กำลังซื้อ...", Duration = 3})
+
                                     local char = lp.Character
                                     local hrp = char and char:FindFirstChild("HumanoidRootPart")
                                     if hrp then
-                                        local tp = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
-                                        if tp then
-                                            hrp.CFrame = tp.CFrame
-                                            task.wait(0.3)
+                                        local targetPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
+                                        if targetPart then
+                                            local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                            if prompt then
+                                                local positions = {
+                                                    CFrame.new(0, 0, 0),      -- ติดกับสัตว์
+                                                    CFrame.new(0, -2, 0),     -- ใต้สัตว์
+                                                    CFrame.new(2, 0, 0),      -- ข้างๆ
+                                                    CFrame.new(-2, 0, 0),
+                                                    CFrame.new(0, 0, 2),
+                                                    CFrame.new(0, 0, -2),
+                                                }
+
+                                                for _, offset in ipairs(positions) do
+                                                    if not obj or not obj.Parent then break end
+
+                                                    hrp.CFrame = targetPart.CFrame * offset
+                                                    task.wait(0.8)
+
+                                                    local oldHold = prompt.HoldDuration
+                                                    prompt.HoldDuration = 0
+
+                                                    for i = 1, 10 do
+                                                        fireproximityprompt(prompt)
+                                                        task.wait(0.2)
+                                                    end
+
+                                                    if firetouchinterest then
+                                                        for _ = 1, 10 do
+                                                            firetouchinterest(hrp, targetPart, 0)
+                                                            task.wait(0.1)
+                                                            firetouchinterest(hrp, targetPart, 1)
+                                                            task.wait(0.1)
+                                                        end
+                                                    end
+
+                                                    prompt.HoldDuration = oldHold
+                                                    task.wait(1)
+
+                                                    if not obj or not obj.Parent or not prompt.Enabled then
+                                                        Fluent:Notify({Title = "สำเร็จ!", Content = "ซื้อ " .. petName .. " สำเร็จ!", Duration = 5})
+                                                        break
+                                                    end
+                                                end
+                                            end
                                         end
-                                    end
-                                    local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-                                    if prompt then
-                                        local oldHold = prompt.HoldDuration
-                                        prompt.HoldDuration = 0
-                                        fireproximityprompt(prompt)
-                                        task.wait(0.2)
-                                        fireproximityprompt(prompt)
-                                        prompt.HoldDuration = oldHold
                                     end
                                     HopPetToggle:SetValue(false)
                                     return
@@ -1820,7 +1908,9 @@ HopPetToggle:OnChanged(function()
                             end
                         end
                     end
+
                     if _hopPetRunning then
+                        Fluent:Notify({Title = "Auto Hop", Content = "ไม่พบสัตว์ กำลัง hop...", Duration = 3})
                         local success, err = pcall(function()
                             local placeId = game.PlaceId
                             local teleportOpts = Instance.new("TeleportOptions")
