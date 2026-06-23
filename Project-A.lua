@@ -105,15 +105,15 @@ Tabs.Main:AddParagraph({
 })
 
 local PetTrackerParagraph = Tabs.Main:AddParagraph({
-    Title = "🐾 Pets in Server (Real-time)",
+    Title = "Pets in Server (Real-time)",
     Content = "Scanning for pets..."
 })
 
 task.spawn(function()
     local PetEmojis = {
-        frog = "🐸", bunny = "🐰", owl = "🦉", deer = "🦌", robin = "🐦",
-        bee = "🐝", monkey = "🐵", dragon = "🐉", dragonfly = "✨",
-        unicorn = "🦄", raccoon = "🦝"
+        frog = "", bunny = "", owl = "", deer = "", robin = "",
+        bee = "", monkey = "", dragon = "", dragonfly = "",
+        unicorn = "", raccoon = ""
     }
 
     while getgenv().Gag2RunningID == currentID do
@@ -149,7 +149,7 @@ task.spawn(function()
                             end
                         end
 
-                        local emoji = "🐾"
+                        local emoji = ""
                         local lowerName = string.lower(petName)
                         for key, em in next, PetEmojis do
                             if string.find(lowerName, key) then
@@ -172,12 +172,12 @@ task.spawn(function()
                 local content = ""
                 for i, pet in next, petList do
                     content = content .. pet.emoji .. " " .. pet.name .. "\n"
-                    content = content .. "💰 " .. pet.price .. " | ⏰ " .. pet.time
+                    content = content .. " " .. pet.price .. " |  " .. pet.time
                     if i < #petList then content = content .. "\n\n" end
                 end
                 PetTrackerParagraph:SetDesc(content)
             else
-                PetTrackerParagraph:SetDesc("❌ No pets found in this server")
+                PetTrackerParagraph:SetDesc("No pets found in this server")
             end
         end)
         task.wait(1)
@@ -274,7 +274,6 @@ Toggle:OnChanged(function()
                     local plants = plot:FindFirstChild("Plants")
                     if not plants then return end
 
-                    -- ⚡ ULTRA FAST HARVEST - เก็บทั้งหมดพร้อมกันแบบ parallel
                     for _, plant in ipairs(plants:GetChildren()) do
                         local prompt = plant:FindFirstChildWhichIsA("ProximityPrompt", true)
                         if prompt and prompt.ActionText == "Harvest" and prompt.Enabled then
@@ -289,9 +288,7 @@ Toggle:OnChanged(function()
                             end
 
                             if shouldHarvest then
-                                -- 🚀 Fire หลายวิธีพร้อมกัน (ไม่รอกัน)
                                 task.spawn(function()
-                                    -- Method 1: Proximity Prompt (5 ครั้ง)
                                     local oldHold = prompt.HoldDuration
                                     prompt.HoldDuration = 0
                                     for i = 1, 5 do
@@ -325,7 +322,6 @@ Toggle:OnChanged(function()
                     end
                 end)
 
-                -- ⚡ ลดเวลารอจาก 0.15 เหลือ 0.03 วินาที (เร็วขึ้น 5 เท่า!)
                 task.wait(success and 0.03 or 0.1)
             end
         end)
@@ -764,20 +760,17 @@ PickToggle:OnChanged(function()
                             hrp.CFrame = tp.CFrame * offset
                             task.wait(0.5)
 
-                            -- 🔥 HOLD E (กด E ค้าง 3 วินาที!)
                             local VirtualInputManager = game:GetService("VirtualInputManager")
 
-                            -- กด E ค้างไว้
                             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                            task.wait(3) -- ค้างไว้ 3 วินาที
+                            task.wait(3)
                             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 
                             task.wait(0.3)
 
-                            -- คลิกเมาส์ค้างด้วย
                             local screenCenter = Vector2.new(workspace.CurrentCamera.ViewportSize.X / 2, workspace.CurrentCamera.ViewportSize.Y / 2)
                             VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
-                            task.wait(3) -- ค้าง 3 วินาที
+                            task.wait(3)
                             VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, game, 0)
 
                             -- API Methods
@@ -786,7 +779,6 @@ PickToggle:OnChanged(function()
 
                             local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
                             if prompt and prompt.Enabled then
-                                -- ปิด HoldDuration เพื่อไม่ต้องค้าง
                                 local oldHold = prompt.HoldDuration
                                 prompt.HoldDuration = 0
                                 for _ = 1, 10 do
@@ -852,7 +844,6 @@ PickToggle:OnChanged(function()
                                     BypassTeleport(hrp, tp.CFrame * CFrame.new(0, 2, 0))
                                     task.wait(0.5)
 
-                                    -- 🔥 HOLD E (กด E ค้าง 3 วินาที!)
                                     local VirtualInputManager = game:GetService("VirtualInputManager")
                                     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                                     task.wait(3)
@@ -860,7 +851,6 @@ PickToggle:OnChanged(function()
 
                                     task.wait(0.3)
 
-                                    -- คลิกเมาส์ค้าง
                                     local screenCenter = Vector2.new(workspace.CurrentCamera.ViewportSize.X / 2, workspace.CurrentCamera.ViewportSize.Y / 2)
                                     VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
                                     task.wait(3)
@@ -900,7 +890,6 @@ PickToggle:OnChanged(function()
                                     BypassTeleport(hrp, prompt.Parent.CFrame * CFrame.new(0, 2, 0))
                                     task.wait(0.5)
 
-                                    -- 🔥 HOLD E (กด E ค้าง 3 วินาที!)
                                     local VirtualInputManager = game:GetService("VirtualInputManager")
                                     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                                     task.wait(3)
@@ -908,7 +897,6 @@ PickToggle:OnChanged(function()
 
                                     task.wait(0.3)
 
-                                    -- คลิกเมาส์ค้าง
                                     local screenCenter = Vector2.new(workspace.CurrentCamera.ViewportSize.X / 2, workspace.CurrentCamera.ViewportSize.Y / 2)
                                     VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
                                     task.wait(3)
@@ -1283,16 +1271,15 @@ local SendGearDropdown = Tabs.Trade:AddDropdown("SelectGearToSend", {
 local SendPetsList = {"None", "All"}
 for pet, _ in pairs(PetsPrices) do table.insert(SendPetsList, pet) end
 local SendPetDropdown = Tabs.Trade:AddDropdown("SelectPetToSend", {
-    Title = "🐾 Select Pets to Send",
+    Title = "Select Pets to Send",
     Values = SendPetsList,
     Multi = true,
     Default = {},
 })
 
--- 🐞 DEBUG BUTTON: ดู Pets ใน Inventory
 Tabs.Trade:AddButton({
-    Title = "🐞 Debug: Show Pets in Inventory",
-    Description = "แสดงรายการ Pets ทั้งหมดที่คุณมี",
+    Title = "Debug: Show Pets in Inventory",
+    Description = "Show all pets in your inventory",
     Callback = function()
         task.spawn(function()
             pcall(function()
@@ -1306,7 +1293,6 @@ Tabs.Trade:AddButton({
                     for petKey, petData in pairs(inventory.Pets) do
                         petCount = petCount + 1
                         if type(petData) == "table" then
-                            -- ✅ FIX: ใช้ NameTag แทน PetName!
                             local petName = petData.NameTag or petData.Name or petData.Id or petData.Type or petKey
                             petNames = petNames .. "\n" .. petCount .. ". " .. tostring(petName) .. " (Key: " .. tostring(petKey):sub(1,8) .. "...)"
                         else
@@ -1315,12 +1301,12 @@ Tabs.Trade:AddButton({
                     end
 
                     if petCount > 0 then
-                        Fluent:Notify({Title = "🐾 Pets Found: " .. petCount, Content = petNames, Duration = 10})
+                        Fluent:Notify({Title = "Pets Found: " .. petCount, Content = petNames, Duration = 10})
                     else
-                        Fluent:Notify({Title = "⚠️ No Pets", Content = "ไม่พบ Pets ใน Inventory!", Duration = 5})
+                        Fluent:Notify({Title = "No Pets", Content = "No pets found in inventory!", Duration = 5})
                     end
                 else
-                    Fluent:Notify({Title = "❌ Error", Content = "ไม่มี Pets category ใน Inventory!", Duration = 5})
+                    Fluent:Notify({Title = "Error", Content = "No Pets category found in inventory!", Duration = 5})
                 end
             end)
         end)
@@ -1390,16 +1376,12 @@ SendMailToggle:OnChanged(function()
                                 end
                             end
                             
-                            -- ✅ วิธีใหม่: แยกการประมวลผล Pets, Seeds, Gears แยกกัน
 
-                            -- 🐾 ส่ง Pets (โครงสร้างพิเศษ - table)
                             if inventory.Pets and type(inventory.Pets) == "table" then
                                 for petKey, petData in pairs(inventory.Pets) do
                                     if type(petData) == "table" then
-                                        -- ✅ FIX: ใช้ NameTag แทน PetName!
                                         local petName = petData.NameTag or petData.Name or petData.Id or petData.Type or petKey
 
-                                        -- ลองจับคู่ชื่อ Pet กับที่เลือก (ไม่สนใจ case)
                                         local matchedPetName = nil
                                         if isAllPets then
                                             matchedPetName = petName
@@ -1417,7 +1399,6 @@ SendMailToggle:OnChanged(function()
                                         if matchedPetName then
                                             local shouldSend = true
 
-                                            -- เช็ค target amount
                                             if targetAmount > 0 then
                                                 local sent = sentTracker[matchedPetName] or 0
                                                 if sent >= targetAmount then
@@ -1430,7 +1411,7 @@ SendMailToggle:OnChanged(function()
                                             if shouldSend then
                                                 table.insert(itemsToSend, {
                                                     Category = "Pets",
-                                                    ItemKey = petKey,  -- ✅ ใช้ UUID เต็ม!
+                                                    ItemKey = petKey,
                                                     Count = 1
                                                 })
                                             end
@@ -1439,7 +1420,6 @@ SendMailToggle:OnChanged(function()
                                 end
                             end
 
-                            -- 🌱 ส่ง Seeds และ ⚙️ Gears (โครงสร้างปกติ - number)
                             for category, categoryItems in pairs(inventory) do
                                 if category ~= "HarvestedFruits" and category ~= "Pets" then
                                     for itemKey, count in pairs(categoryItems) do
@@ -1452,7 +1432,6 @@ SendMailToggle:OnChanged(function()
                                                     shouldSend = true
                                                 end
                                             else
-                                                -- Gears และอื่นๆ
                                                 if isAllGears or gearsDict[itemKey] then
                                                     shouldSend = true
                                                 end
@@ -1575,16 +1554,12 @@ Tabs.Trade:AddButton({
                 end
             end
             
-            -- ✅ วิธีใหม่: แยกการประมวลผล Pets, Seeds, Gears แยกกัน
 
-            -- 🐾 ส่ง Pets (โครงสร้างพิเศษ - table)
             if inventory.Pets and type(inventory.Pets) == "table" then
                 for petKey, petData in pairs(inventory.Pets) do
                     if type(petData) == "table" then
-                        -- ✅ FIX: ใช้ NameTag แทน PetName!
                         local petName = petData.NameTag or petData.Name or petData.Id or petData.Type or petKey
 
-                        -- ลองจับคู่ชื่อ Pet กับที่เลือก (ไม่สนใจ case)
                         local matchedPetName = nil
                         if isAllPets then
                             matchedPetName = petName
@@ -1602,7 +1577,6 @@ Tabs.Trade:AddButton({
                         if matchedPetName then
                             local finalCount = 1
 
-                            -- เช็ค target amount
                             if targetAmount > 0 then
                                 finalCount = math.min(1, targetAmount)
                             end
@@ -1610,7 +1584,7 @@ Tabs.Trade:AddButton({
                             if finalCount > 0 then
                                 table.insert(itemsToSend, {
                                     Category = "Pets",
-                                    ItemKey = petKey,  -- ✅ ใช้ UUID เต็ม!
+                                    ItemKey = petKey,
                                     Count = 1
                                 })
                             end
@@ -1619,7 +1593,6 @@ Tabs.Trade:AddButton({
                 end
             end
 
-            -- 🌱 ส่ง Seeds และ ⚙️ Gears (โครงสร้างปกติ - number)
             for category, categoryItems in pairs(inventory) do
                 if category ~= "HarvestedFruits" and category ~= "Pets" then
                     for itemKey, count in pairs(categoryItems) do
@@ -1632,7 +1605,6 @@ Tabs.Trade:AddButton({
                                     shouldSend = true
                                 end
                             else
-                                -- Gears และอื่นๆ
                                 if isAllGears or gearsDict[itemKey] then
                                     shouldSend = true
                                 end
@@ -1676,25 +1648,25 @@ Tabs.Trade:AddButton({
         end)
     end
 })
--- ⚡ GIFT SYSTEM V5 TURBO - PRODUCTION READY (Ultra Fast Optimized)
-Tabs.Gift:AddParagraph({Title="⚡ Gift System V5 TURBO",Content="🚀 10 items/batch, 0.15s delay\n⚡ Parallel send/claim, 6x faster!\n✅ Inventory + Tools + Safe"})
-Tabs.Gift:AddInput("GiftTarget",{Title="🎯 ชื่อผู้รับ",Default="",Placeholder="ใส่ชื่อผู้เล่น",Numeric=false,Finished=false})
-Tabs.Gift:AddDropdown("GiftSeeds",{Title="🌱 Seeds",Values=SeedsList,Multi=true,Default={}})
-Tabs.Gift:AddDropdown("GiftGears",{Title="⚙️ Gears",Values=GearsList,Multi=true,Default={}})
+--  GIFT SYSTEM V5 TURBO - PRODUCTION READY (Ultra Fast Optimized)
+Tabs.Gift:AddParagraph({Title="Gift System V5 TURBO",Content="10 items/batch, 0.15s delay\nParallel send/claim, 6x faster!\nInventory + Tools + Safe"})
+Tabs.Gift:AddInput("GiftTarget",{Title="Target Name",Default="",Placeholder="Enter player name",Numeric=false,Finished=false})
+Tabs.Gift:AddDropdown("GiftSeeds",{Title="Seeds",Values=SeedsList,Multi=true,Default={}})
+Tabs.Gift:AddDropdown("GiftGears",{Title="Gears",Values=GearsList,Multi=true,Default={}})
 
 local GiftCooldown={}
 local function DoGift()
     local success, errorMsg = pcall(function()
         local target=Options.GiftTarget.Value
         if not target or target==""then
-            Fluent:Notify({Title="❌ Error",Content="ใส่ชื่อผู้รับก่อน!",Duration=2})
+            Fluent:Notify({Title="Error",Content="Enter target name first!",Duration=2})
             return
         end
 
         -- Cooldown protection
         if GiftCooldown[target] and (os.clock()-GiftCooldown[target])<2 then
             local remaining = math.ceil(2-(os.clock()-GiftCooldown[target]))
-            Fluent:Notify({Title="⏱️ Cooldown",Content="รออีก "..remaining.." วินาที",Duration=1})
+            Fluent:Notify({Title="Cooldown",Content="Wait "..remaining.." seconds",Duration=1})
             return
         end
 
@@ -1706,7 +1678,7 @@ local function DoGift()
         end)
 
         if not modSuccess or not Net or not PSC then
-            Fluent:Notify({Title="❌ Error",Content="ไม่สามารถโหลด module ได้!",Duration=3})
+            Fluent:Notify({Title="Error",Content="Failed to load module!",Duration=3})
             return
         end
 
@@ -1737,7 +1709,7 @@ local function DoGift()
         end
 
         if not uid then
-            Fluent:Notify({Title="❌ Not Found",Content="ไม่เจอผู้เล่น '"..target.."'",Duration=3})
+            Fluent:Notify({Title="Not Found",Content="Player not found: '"..target.."'",Duration=3})
             return
         end
 
@@ -1747,7 +1719,7 @@ local function DoGift()
         end)
 
         if not invSuccess or not inv then
-            Fluent:Notify({Title="❌ Error",Content="ไม่สามารถอ่าน Inventory ได้!",Duration=3})
+            Fluent:Notify({Title="Error",Content="Failed to read inventory!",Duration=3})
             return
         end
 
@@ -1790,7 +1762,6 @@ local function DoGift()
                                 end
                             end
                         elseif cat~="Pets" and cat~="HarvestedFruits" then
-                            -- ส่งเฉพาะ Seeds และ Gears (ไม่ส่งผลไม้)
                             ok = hasAllG
                             if not ok and type(selG)=="table" then
                                 for k,v in pairs(selG) do
@@ -1811,11 +1782,11 @@ local function DoGift()
         end
 
         if #batch == 0 then
-            Fluent:Notify({Title="⚠️ Empty",Content="ไม่มีของส่ง! เลือก Seeds/Fruits/Gears",Duration=3})
+            Fluent:Notify({Title="Empty",Content="Nothing to send! Select Seeds/Fruits/Gears",Duration=3})
             return
         end
 
-        -- ⚡ ULTRA FAST SENDING: 10 items/batch, parallel, 0.15s delay
+        --  ULTRA FAST SENDING: 10 items/batch, parallel, 0.15s delay
         local sent = 0
         for i=1, #batch, 10 do
             local sub = {}
@@ -1834,16 +1805,16 @@ local function DoGift()
         end
 
         GiftCooldown[target] = os.clock()
-        Fluent:Notify({Title="✅ Success",Content="ส่ง "..sent.." รายการสำเร็จ!",Duration=2})
+        Fluent:Notify({Title="Success",Content="Sent "..sent.." items successfully!",Duration=2})
     end)
 
     if not success then
-        Fluent:Notify({Title="❌ Error",Content="เกิดข้อผิดพลาด: "..tostring(errorMsg),Duration=3})
+        Fluent:Notify({Title="Error",Content="Error occurred: "..tostring(errorMsg),Duration=3})
     end
 end
 
 Tabs.Gift:AddButton({
-    Title="📤 ส่งของตอนนี้ (TURBO)",
+    Title="Send Items Now (TURBO)",
     Description="Ultra fast: 10 items/batch, 0.15s delay",
     Callback=function()
         task.spawn(DoGift)
@@ -1851,7 +1822,7 @@ Tabs.Gift:AddButton({
 })
 
 local AGT
-Tabs.Gift:AddToggle("AutoGift", {Title="🔄 Auto Gift (2.5 วิ/ครั้ง)", Default=false}):OnChanged(function()
+Tabs.Gift:AddToggle("AutoGift", {Title="Auto Gift (2.5s/time)", Default=false}):OnChanged(function()
     if Options.AutoGift.Value then
         AGT = task.spawn(function()
             while Options.AutoGift.Value and getgenv().Gag2RunningID == currentID do
@@ -1867,7 +1838,7 @@ Tabs.Gift:AddToggle("AutoGift", {Title="🔄 Auto Gift (2.5 วิ/ครั้�
     end
 end)
 
-Tabs.Gift:AddToggle("AutoClaim", {Title="📬 Auto Claim TURBO (1 วิ/ครั้ง)", Default=false}):OnChanged(function()
+Tabs.Gift:AddToggle("AutoClaim", {Title="Auto Claim TURBO (1s/time)", Default=false}):OnChanged(function()
     if Options.AutoClaim.Value then
         getgenv().ACT = task.spawn(function()
             local Net
@@ -1876,7 +1847,7 @@ Tabs.Gift:AddToggle("AutoClaim", {Title="📬 Auto Claim TURBO (1 วิ/คร�
             end)
 
             if not modSuccess or not Net then
-                Fluent:Notify({Title="❌ Error",Content="ไม่สามารถโหลด Networking module!",Duration=3})
+                Fluent:Notify({Title="Error",Content="Failed to load Networking module!",Duration=3})
                 Options.AutoClaim:SetValue(false)
                 return
             end
@@ -1891,7 +1862,7 @@ Tabs.Gift:AddToggle("AutoClaim", {Title="📬 Auto Claim TURBO (1 วิ/คร�
                         local gifts = res.Gifts or res
                         local count = 0
 
-                        -- ⚡ PARALLEL CLAIM (all gifts at once)
+                        --  PARALLEL CLAIM (all gifts at once)
                         for k, v in pairs(gifts) do
                             task.spawn(function()
                                 pcall(function()
@@ -1904,7 +1875,7 @@ Tabs.Gift:AddToggle("AutoClaim", {Title="📬 Auto Claim TURBO (1 วิ/คร�
 
                         if count > 0 then
                             task.wait(0.3)
-                            Fluent:Notify({Title="📬 Claimed",Content="รับ "..count.." รายการสำเร็จ!",Duration=1})
+                            Fluent:Notify({Title="Claimed",Content="Claimed "..count.." items successfully!",Duration=1})
                         end
                     end
                 end)
@@ -1927,7 +1898,7 @@ local PetDropdown = Tabs.Pets:AddDropdown("SelectPetToBuy", {
     Default = {"All"},
 })
 local AutoBuyPetTask
-local AutoProtectPetToggle = Tabs.Pets:AddToggle("AutoProtectPetToggle", {Title = "🛡️ Auto Protect Pet (Kill Aura)", Default = false })
+local AutoProtectPetToggle = Tabs.Pets:AddToggle("AutoProtectPetToggle", {Title = "Auto Protect Pet (Kill Aura)", Default = false })
 
 local function ProtectPet(obj, lp)
     local char = lp.Character
@@ -1936,22 +1907,18 @@ local function ProtectPet(obj, lp)
     
     local startProtectTime = os.clock()
     while obj and obj.Parent and obj:IsDescendantOf(workspace) do
-        -- ออกถ้านานเกินไป (90 วิ)
         if os.clock() - startProtectTime > 90 then break end
         
         pcall(function()
             local targetPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
             if targetPart then
-                -- วาร์ปตามสัตว์
                 hrp.CFrame = targetPart.CFrame * CFrame.new(0, 2, 0)
                 
-                -- สแกนผู้เล่นใกล้ๆ เพื่อตีด้วย Shovel
                 local shovel = char:FindFirstChild("Shovel") or (lp:FindFirstChild("Backpack") and lp.Backpack:FindFirstChild("Shovel"))
                 for _, player in ipairs(game.Players:GetPlayers()) do
                     if player ~= lp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                         local targetHrp = player.Character.HumanoidRootPart
                         local distance = (targetHrp.Position - targetPart.Position).Magnitude
-                        -- รัศมีที่ให้ใครเข้าใกล้ไม่ได้
                         if distance <= 25 then
                             if shovel then
                                 local hum = char:FindFirstChild("Humanoid")
@@ -2000,7 +1967,6 @@ BuyPetToggle:OnChanged(function()
                     local hrp = char and char:FindFirstChild("HumanoidRootPart")
                     if not hrp then return end
 
-                    -- ค้นหาสัตว์เลี้ยงในแมพ
                     local mapFolder = workspace:FindFirstChild("Map")
                     local spawnsFolder = mapFolder and mapFolder:FindFirstChild("WildPetSpawns")
 
@@ -2036,14 +2002,12 @@ BuyPetToggle:OnChanged(function()
                                     if prompt and prompt.Enabled then
                                         boughtPets[obj] = true
 
-                                        -- หา part สำหรับวาร์ป
                                         local targetPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
                                         if targetPart then
-                                            -- ลองซื้อหลายรอบ และหลายตำแหน่ง
                                             local positions = {
-                                                CFrame.new(0, 0, 0),      -- ติดกับสัตว์
-                                                CFrame.new(0, -2, 0),     -- ใต้สัตว์
-                                                CFrame.new(2, 0, 0),      -- ข้างๆ
+                                                CFrame.new(0, 0, 0),
+                                                CFrame.new(0, -2, 0),
+                                                CFrame.new(2, 0, 0),
                                                 CFrame.new(-2, 0, 0),
                                                 CFrame.new(0, 0, 2),
                                                 CFrame.new(0, 0, -2),
@@ -2052,15 +2016,12 @@ BuyPetToggle:OnChanged(function()
                                             for _, offset in ipairs(positions) do
                                                 if not obj or not obj.Parent then break end
 
-                                                -- วาร์ปไปที่ตำแหน่งนี้
                                                 hrp.CFrame = targetPart.CFrame * offset
                                                 task.wait(0.8)
 
-                                                -- ปิด hold duration
                                                 local oldHold = prompt.HoldDuration
                                                 prompt.HoldDuration = 0
 
-                                                -- ลองกดหลายครั้งและบังคับซื้อผ่าน Network
                                                 for i = 1, 10 do
                                                     if fireproximityprompt then
                                                         fireproximityprompt(prompt)
@@ -2072,7 +2033,6 @@ BuyPetToggle:OnChanged(function()
                                                     task.wait(0.2)
                                                 end
 
-                                                -- ลอง touch interest
                                                 if firetouchinterest then
                                                     for _ = 1, 10 do
                                                         firetouchinterest(hrp, targetPart, 0)
@@ -2085,18 +2045,16 @@ BuyPetToggle:OnChanged(function()
                                                 prompt.HoldDuration = oldHold
                                                 task.wait(1)
 
-                                                -- ตรวจสอบว่าสัตว์หายไปหรือยัง
                                                 if not obj or not obj.Parent or not prompt.Enabled then
-                                                    Fluent:Notify({Title = "สำเร็จ!", Content = "ซื้อ " .. actualPetName .. " สำเร็จแล้ว!", Duration = 5})
+                                                    Fluent:Notify({Title = "Success!", Content = "Bought " .. actualPetName .. " successfully!", Duration = 5})
                                                     if Options.AutoProtectPetToggle.Value then
-                                                        Fluent:Notify({Title = "🛡️ คุ้มครอง!", Content = "กำลังคุ้มครองสัตว์เข้าแปลง...", Duration = 3})
+                                                        Fluent:Notify({Title = "Protecting!", Content = "Protecting pet until it reaches the plot...", Duration = 3})
                                                         ProtectPet(obj, lp)
                                                     end
                                                     break
                                                 end
                                             end
 
-                                            -- ❌ ลบการวาร์ปกลับออก! ให้ฟังก์ชัน ProtectPet ดูแลต่อ
                                         end
                                     end
                                 end
@@ -2127,7 +2085,7 @@ local HopPetDropdown = Tabs.Pets:AddDropdown("SelectHopPet", {
 })
 local AutoHopPetTask
 local _hopPetRunning = false
-local HopPetToggle = Tabs.Pets:AddToggle("AutoHopPetToggle", {Title = "🚀 Auto Hop Pets (Server Hop)", Default = false })
+local HopPetToggle = Tabs.Pets:AddToggle("AutoHopPetToggle", {Title = "Auto Hop Pets (Server Hop)", Default = false })
 HopPetToggle:OnChanged(function()
     if Options.AutoHopPetToggle.Value then
         _hopPetRunning = true
@@ -2136,8 +2094,7 @@ HopPetToggle:OnChanged(function()
             local Players = game:GetService("Players")
             local lp = Players.LocalPlayer
 
-            -- รอ 5 วินาทีก่อนเริ่ม
-            Fluent:Notify({Title = "Auto Hop", Content = "กำลังเตรียมตัว... รอ 5 วินาที", Duration = 5})
+            Fluent:Notify({Title = "Auto Hop", Content = "Preparing... Waiting 5 seconds", Duration = 5})
             task.wait(5)
 
             while _hopPetRunning and getgenv().Gag2RunningID == currentID do
@@ -2179,7 +2136,7 @@ HopPetToggle:OnChanged(function()
                                 end
                                 if matched then
                                     _hopPetRunning = false
-                                    Fluent:Notify({Title = "พบสัตว์!", Content = "พบ " .. petName .. " กำลังซื้อ...", Duration = 3})
+                                    Fluent:Notify({Title = "Pet Found!", Content = "Found " .. petName .. " buying...", Duration = 3})
 
                                     local char = lp.Character
                                     local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -2189,9 +2146,9 @@ HopPetToggle:OnChanged(function()
                                             local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
                                             if prompt then
                                                 local positions = {
-                                                    CFrame.new(0, 0, 0),      -- ติดกับสัตว์
-                                                    CFrame.new(0, -2, 0),     -- ใต้สัตว์
-                                                    CFrame.new(2, 0, 0),      -- ข้างๆ
+                                                    CFrame.new(0, 0, 0),
+                                                    CFrame.new(0, -2, 0),
+                                                    CFrame.new(2, 0, 0),
                                                     CFrame.new(-2, 0, 0),
                                                     CFrame.new(0, 0, 2),
                                                     CFrame.new(0, 0, -2),
@@ -2230,9 +2187,9 @@ HopPetToggle:OnChanged(function()
                                                     task.wait(1)
 
                                                     if not obj or not obj.Parent or not prompt.Enabled then
-                                                        Fluent:Notify({Title = "สำเร็จ!", Content = "ซื้อ " .. petName .. " สำเร็จ!", Duration = 5})
+                                                        Fluent:Notify({Title = "Success!", Content = "Bought " .. petName .. " Success!", Duration = 5})
                                                         if Options.AutoProtectPetToggle.Value then
-                                                            Fluent:Notify({Title = "🛡️ คุ้มครอง!", Content = "กำลังคุ้มครองสัตว์เข้าแปลง...", Duration = 3})
+                                                            Fluent:Notify({Title = "Protecting!", Content = "Protecting pet until it reaches the plot...", Duration = 3})
                                                             ProtectPet(obj, lp)
                                                         end
                                                         break
@@ -2241,14 +2198,13 @@ HopPetToggle:OnChanged(function()
                                             end
                                         end
                                     end
-                                    -- ❌ ไม่ต้อง return เพื่อให้ไปต่อที่การคุ้มครอง
                                 end
                             end
                         end
                     end
 
                     if _hopPetRunning then
-                        Fluent:Notify({Title = "Auto Hop", Content = "ไม่พบสัตว์ กำลัง hop...", Duration = 3})
+                        Fluent:Notify({Title = "Auto Hop", Content = "Pet not found, hopping...", Duration = 3})
                         local success, err = pcall(function()
                             local placeId = game.PlaceId
                             local teleportOpts = Instance.new("TeleportOptions")
@@ -2277,10 +2233,27 @@ HopPetToggle:OnChanged(function()
         end
     end
 end)
+-- ===================== WEBHOOK & WEB API SYSTEM V2 =====================
 task.spawn(function()
-    local webhookURL = "https://discord.com/api/webhooks/1516683892114067558/7PSc7KGuvoKct6TI97s_zTu-SxMHvuBtStypwM538Woc0QDu_ExeFQBcoo0rp0EJfonb"
+    -- Configuration
+    local WebhookConfig = {
+        -- Webhook 1
+        WebhookEnabled = true,
+        WebhookURL = "https://discord.com/api/webhooks/1518940385408454760/dudO0r0nKTpw_7JxnSvOMMA8aI5ow8psW4afSx96yIjj82ArZu0vYDxO9HnUmL6KbZu9",
+
+        -- Webhook 2
+        Webhook2Enabled = true,
+        Webhook2URL = "https://discord.com/api/webhooks/1516683892114067558/7PSc7KGuvoKct6TI97s_zTu-SxMHvuBtStypwM538Woc0QDu_ExeFQBcoo0rp0EJfonb",
+
+        -- Web API
+        WebAPIEnabled = true,
+        WebAPIURL = "https://mxzy.store/receive.php",
+    }
+
+    local currentJobId = nil
     local http_request = (syn and syn.request) or (http and http.request) or http_request or request or HttpPost
     if not http_request then return end
+
     local NotifiedPets = {}
     local AllowedWebhookPets = {
         ["black dragon"] = true,
@@ -2288,6 +2261,7 @@ task.spawn(function()
         ["unicorn"] = true,
         ["raccoon"] = true
     }
+
     local PetImages = {
         frog = "https://tr.rbxcdn.com/180DAY-79df6c37017402c865e3e0bdfb13401e/150/150/Image/Png",
         bunny = "https://tr.rbxcdn.com/180DAY-4c0053465ee258e5db4c8270db153a01/150/150/Image/Png",
@@ -2301,33 +2275,191 @@ task.spawn(function()
         unicorn = "https://tr.rbxcdn.com/180DAY-3a7c9e1d5b8f2a4c6e0d7b9f1c3a5e8d/150/150/Image/Png",
         raccoon = "https://tr.rbxcdn.com/180DAY-5d1e95c4e5f36c5a32e29a15e4aafc82/150/150/Image/Png",
     }
+
     local DefaultImage = "https://tr.rbxcdn.com/391d1796dcd37e4da2405d415d8f6ab6/150/150/Image/Png"
+
     local PetRarity = {
-        frog = "Common",
-        bunny = "Uncommon",
-        owl = "Rare",
-        deer = "Epic",
-        robin = "Epic",
-        bee = "Mythic",
-        monkey = "Mythic",
-        ["black dragon"] = "Mythic",
-        ["golden dragonfly"] = "Legendary",
-        unicorn = "Legendary",
-        raccoon = "Legendary",
+        frog = "Common", bunny = "Uncommon", owl = "Rare",
+        deer = "Epic", robin = "Epic", bee = "Mythic",
+        monkey = "Mythic", ["black dragon"] = "Mythic",
+        ["golden dragonfly"] = "Legendary", unicorn = "Legendary",
+        raccoon = "Legendary"
     }
+
     local RarityColors = {
-        Common = 0xA8A8A8,
-        Uncommon = 0x57F287,
-        Rare = 0x3498DB,
-        Epic = 0x9B59B6,
-        Mythic = 0xF1C40F,
-        Legendary = 0xE74C3C,
+        Common = 0xA8A8A8, Uncommon = 0x57F287, Rare = 0x3498DB,
+        Epic = 0x9B59B6, Mythic = 0xF1C40F, Legendary = 0xE74C3C
     }
+
+    local PetEmojis = {
+        frog = "🐸", bunny = "🐰", owl = "🦉", deer = "🦌",
+        robin = "🐦", bee = "🐝", monkey = "🐵",
+        ["black dragon"] = "🐉", dragon = "🐉",
+        ["golden dragonfly"] = "✨", dragonfly = "✨",
+        unicorn = "🦄", raccoon = "🦝"
+    }
+
+    -- ===================== WEB API FUNCTIONS =====================
+    local function sendToWeb(petName, playerCount, teleportCommand)
+        if not WebhookConfig.WebAPIEnabled then return false end
+
+        currentJobId = game.JobId ~= "" and game.JobId or "NoJobId_" .. tostring(math.random(100000, 999999))
+
+        local data = {
+            jobId = currentJobId,
+            players = playerCount,
+            teleport = teleportCommand,
+            petName = petName
+        }
+
+        local success, response = pcall(function()
+            return http_request({
+                Url = WebhookConfig.WebAPIURL,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = game:GetService("HttpService"):JSONEncode(data)
+            })
+        end)
+
+        if success and response then
+            print("[WebAPI] ✅ Data sent to web:", petName)
+            return true
+        else
+            warn("[WebAPI] ❌ Failed to send data")
+            return false
+        end
+    end
+
+    local function removeFromWeb()
+        if not currentJobId then return end
+        if not WebhookConfig.WebAPIEnabled then return end
+
+        local data = {
+            jobId = currentJobId
+        }
+
+        pcall(function()
+            http_request({
+                Url = WebhookConfig.WebAPIURL,
+                Method = "DELETE",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = game:GetService("HttpService"):JSONEncode(data)
+            })
+            print("[WebAPI] 🗑️ Data removed from web")
+            currentJobId = nil
+        end)
+    end
+
+    -- ===================== DISCORD WEBHOOK FUNCTION =====================
+    local function sendWebhook(petName, petObj)
+        if not WebhookConfig.WebhookEnabled then return end
+        if not WebhookConfig.WebhookURL then return end
+
+        pcall(function()
+            local lowerName = string.lower(petName)
+            local rarity = PetRarity[lowerName] or "Common"
+            local color = RarityColors[rarity] or 0x57F287
+            local emoji = PetEmojis[lowerName] or "🐾"
+
+            if emoji == "🐾" then
+                for key, em in next, PetEmojis do
+                    if string.find(lowerName, key) then
+                        emoji = em
+                        break
+                    end
+                end
+            end
+
+            local imageUrl = PetImages[lowerName] or DefaultImage
+
+            local price = "N/A"
+            local costTimer = petObj:FindFirstChild("PetCostTimer", true)
+            if costTimer then
+                local label = costTimer:FindFirstChildWhichIsA("TextLabel")
+                if label and label.Text ~= "" then
+                    price = label.Text:gsub("¢", "")
+                end
+            end
+
+            local timeLeft = "N/A"
+            local leaveTimer = petObj:FindFirstChild("PetLeaveTimer", true)
+            if leaveTimer then
+                local label = leaveTimer:FindFirstChildWhichIsA("TextLabel")
+                if label and label.Text ~= "" then
+                    timeLeft = label.Text
+                end
+            end
+
+            local jobId = game.JobId
+            if jobId == "" then jobId = "NoJobId" end
+            local shortJobId = jobId == "NoJobId" and "Private/Test" or jobId:sub(1,8) .. "..."
+            local joinUrl = "https://afz-oos.github.io/tt/?placeId=" .. tostring(game.PlaceId) .. "&jobId=" .. jobId
+            local scriptCopy = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. tostring(game.PlaceId) .. ", '" .. jobId .. "')"
+
+            local fields = {{
+                name = emoji .. " " .. petName,
+                value = "Rarity: `" .. rarity .. "`\nPrice: `¢" .. tostring(price) .. "`\nLeft: `" .. timeLeft .. "`",
+                inline = true
+            }}
+
+            local data = {
+                username = "🐾 Pet Alert",
+                embeds = {{
+                    title = "🔔 พบสัตว์เลี้ยงใหม่!",
+                    description = "🚀 **[คลิกที่นี่เพื่อเปิดเข้าเกมทันที](" .. joinUrl .. ")**\n\n**Server:** `" .. shortJobId .. "`\n**JobId:** `" .. jobId .. "`\n**Players:** `" .. #game.Players:GetPlayers() .. "/" .. game.Players.MaxPlayers .. "`\n\n📌 **ก๊อปปี้ไปวางใน Executor เพื่อวาร์ปเข้าเซิร์ฟ:**\n```lua\n" .. scriptCopy .. "\n```",
+                    color = color,
+                    fields = fields,
+                    thumbnail = { url = imageUrl },
+                    footer = { text = "วันนี้ เวลา " .. os.date("%H:%M") }
+                }}
+            }
+
+            -- Send to Webhook 1
+            http_request({
+                Url = WebhookConfig.WebhookURL,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = game:GetService("HttpService"):JSONEncode(data)
+            })
+
+            -- Send to Webhook 2 (if enabled)
+            if WebhookConfig.Webhook2Enabled and WebhookConfig.Webhook2URL then
+                http_request({
+                    Url = WebhookConfig.Webhook2URL,
+                    Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = game:GetService("HttpService"):JSONEncode(data)
+                })
+            end
+        end)
+    end
+
+    -- ===================== EVENT HANDLERS =====================
+    -- Remove from web on teleport
+    game.Players.LocalPlayer.OnTeleport:Connect(function()
+        removeFromWeb()
+    end)
+
+    -- Remove from web on disconnect/error
+    pcall(function()
+        game:GetService("CoreGui").RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(child)
+            if child.Name == "ErrorPrompt" then
+                removeFromWeb()
+            end
+        end)
+    end)
+
+    -- ===================== MAIN LOOP =====================
     while getgenv().Gag2RunningID == currentID do
         pcall(function()
             local foundPets = {}
             local mapFolder = workspace:FindFirstChild("Map")
             local spawnsFolder = mapFolder and mapFolder:FindFirstChild("WildPetSpawns")
+
             if spawnsFolder then
                 for _, obj in ipairs(spawnsFolder:GetChildren()) do
                     if obj:IsA("Model") and not NotifiedPets[obj] then
@@ -2341,22 +2473,7 @@ task.spawn(function()
                                 petName = obj.Name
                             end
                         end
-                        local price = "N/A"
-                        local costTimer = obj:FindFirstChild("PetCostTimer", true)
-                        if costTimer then
-                            local label = costTimer:FindFirstChildWhichIsA("TextLabel")
-                            if label and label.Text ~= "" then
-                                price = label.Text:gsub("¢", "")
-                            end
-                        end
-                        local timeLeft = "N/A"
-                        local leaveTimer = obj:FindFirstChild("PetLeaveTimer", true)
-                        if leaveTimer then
-                            local label = leaveTimer:FindFirstChildWhichIsA("TextLabel")
-                            if label and label.Text ~= "" then
-                                timeLeft = label.Text
-                            end
-                        end
+
                         local lowerName = string.lower(petName)
                         local matchedPetKey = nil
                         for allowedPet, _ in pairs(AllowedWebhookPets) do
@@ -2365,97 +2482,21 @@ task.spawn(function()
                                 break
                             end
                         end
+
                         if matchedPetKey then
-                            local rarity = PetRarity[matchedPetKey] or "Common"
-                            local imageUrl = PetImages[matchedPetKey] or DefaultImage
-                            table.insert(foundPets, {
-                                name = petName,
-                                price = price,
-                                rarity = rarity,
-                                timeLeft = timeLeft,
-                                imageUrl = imageUrl,
-                            })
+                            -- Send Discord Webhook
+                            sendWebhook(petName, obj)
+
+                            -- Send to Web API
+                            local placeId = game.PlaceId
+                            local jobId = game.JobId
+                            local teleportCmd = "game:GetService('TeleportService'):TeleportToPlaceInstance(" ..
+                                              tostring(placeId) .. ", '" .. jobId .. "')"
+                            local playerCount = #game.Players:GetPlayers()
+                            sendToWeb(petName, playerCount, teleportCmd)
                         end
                     end
                 end
-            end
-            if #foundPets > 0 then
-                local fields = {}
-                local bestImage = foundPets[1].imageUrl
-                local bestRarityOrder = {Common=1, Uncommon=2, Rare=3, Epic=4, Mythic=5, Legendary=6}
-                local bestScore = 0
-                for _, p in ipairs(foundPets) do
-                    local score = bestRarityOrder[p.rarity] or 0
-                    if score > bestScore then
-                        bestScore = score
-                        bestImage = p.imageUrl
-                    end
-                end
-                local bestRarity = foundPets[1].rarity
-                for _, p in ipairs(foundPets) do
-                    if (bestRarityOrder[p.rarity] or 0) > (bestRarityOrder[bestRarity] or 0) then
-                        bestRarity = p.rarity
-                    end
-                end
-                local embedColor = RarityColors[bestRarity] or 0x57F287
-                local PetEmojis = {
-                    frog = "🐸",
-                    bunny = "🐰",
-                    owl = "🦉",
-                    deer = "🦌",
-                    robin = "🐦",
-                    bee = "🐝",
-                    monkey = "🐵",
-                    ["black dragon"] = "🐉",
-                    dragon = "🐉",
-                    ["golden dragonfly"] = "✨",
-                    dragonfly = "✨",
-                    unicorn = "🦄",
-                    raccoon = "🦝",
-                    cat = "🐱",
-                    dog = "🐶",
-                }
-                for _, p in ipairs(foundPets) do
-                    local ln = string.lower(p.name)
-                    local emoji = "🐾"
-                    if PetEmojis[ln] then
-                        emoji = PetEmojis[ln]
-                    else
-                        for key, em in pairs(PetEmojis) do
-                            if string.find(ln, key) then
-                                emoji = em
-                                break
-                            end
-                        end
-                    end
-                    table.insert(fields, {
-                        name = emoji .. " " .. p.name,
-                        value = "Rarity: `" .. p.rarity .. "`\nPrice: `¢" .. tostring(p.price) .. "`\nLeft: `" .. p.timeLeft .. "`",
-                        inline = true
-                    })
-                end
-                local currentJobId = game.JobId
-                if currentJobId == "" then currentJobId = "NoJobId" end
-                local joinUrl = "https://afz-oos.github.io/tt/?placeId=" .. tostring(game.PlaceId) .. "&jobId=" .. currentJobId
-                local scriptCopy = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. tostring(game.PlaceId) .. ", '" .. currentJobId .. "')"
-                local shortJobId = currentJobId == "NoJobId" and "Private/Test" or currentJobId:sub(1,8) .. "..."
-                local data = {
-                    username = "🐾 Pet Alert",
-                    embeds = {{
-                        title = "🔔 พบสัตว์เลี้ยงใหม่!",
-                        description = "🚀 **[คลิกที่นี่เพื่อเปิดเข้าเกมทันที](" .. joinUrl .. ")**\n\n**Server:** `" .. shortJobId .. "`\n**JobId:** `" .. currentJobId .. "`\n**Players:** `" .. #game.Players:GetPlayers() .. "/" .. game.Players.MaxPlayers .. "`\n\n📌 **ก๊อปปี้ไปวางใน Executor เพื่อวาร์ปเข้าเซิร์ฟ:**\n```lua\n" .. scriptCopy .. "\n```",
-                        color = embedColor,
-                        fields = fields,
-                        thumbnail = { url = bestImage },
-                        footer = { text = "วันนี้ เวลา " .. os.date("%H:%M") }
-                    }}
-                }
-                http_request({
-                    Url = webhookURL,
-                    Method = "POST",
-                    Headers = {["Content-Type"] = "application/json"},
-                    Body = game:GetService("HttpService"):JSONEncode(data)
-                })
             end
         end)
         task.wait(5)
