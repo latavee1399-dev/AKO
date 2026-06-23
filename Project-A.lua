@@ -1249,6 +1249,7 @@ SellToggle:OnChanged(function()
 end)
 local AutoSendMailTask
 local TargetUserIdCache = {}
+
 local TargetPlayerInput = Tabs.Trade:AddInput("TargetPlayerMail", {
     Title = "Target Player Name",
     Default = "",
@@ -1256,6 +1257,7 @@ local TargetPlayerInput = Tabs.Trade:AddInput("TargetPlayerMail", {
     Numeric = false,
     Finished = false,
 })
+
 local SendMailAmountInput = Tabs.Trade:AddInput("SendMailAmount", {
     Title = "Amount to Send (0 = All)",
     Default = "0",
@@ -1263,18 +1265,21 @@ local SendMailAmountInput = Tabs.Trade:AddInput("SendMailAmount", {
     Numeric = true,
     Finished = false,
 })
+
 local SendSeedDropdown = Tabs.Trade:AddDropdown("SelectSeedToSend", {
     Title = "Select Seeds to Send",
     Values = SeedsList,
     Multi = true,
     Default = {},
 })
+
 local SendGearDropdown = Tabs.Trade:AddDropdown("SelectGearToSend", {
     Title = "Select Gears to Send",
     Values = GearsList,
     Multi = true,
     Default = {},
 })
+
 local SendPetsList = {"None", "All"}
 for pet, _ in pairs(PetsPrices) do table.insert(SendPetsList, pet) end
 local SendPetDropdown = Tabs.Trade:AddDropdown("SelectPetToSend", {
@@ -1283,14 +1288,55 @@ local SendPetDropdown = Tabs.Trade:AddDropdown("SelectPetToSend", {
     Multi = true,
     Default = {},
 })
+
+-- 🐞 DEBUG BUTTON: ดู Pets ใน Inventory
+Tabs.Trade:AddButton({
+    Title = "🐞 Debug: Show Pets in Inventory",
+    Description = "แสดงรายการ Pets ทั้งหมดที่คุณมี",
+    Callback = function()
+        task.spawn(function()
+            pcall(function()
+                local PlayerStateClient = require(game:GetService("ReplicatedStorage").ClientModules.PlayerStateClient)
+                local inventory = PlayerStateClient.GetLocalReplica().Data.Inventory
+
+                if inventory.Pets and type(inventory.Pets) == "table" then
+                    local petCount = 0
+                    local petNames = ""
+
+                    for petKey, petData in pairs(inventory.Pets) do
+                        petCount = petCount + 1
+                        if type(petData) == "table" then
+                            -- ✅ FIX: ใช้ NameTag แทน PetName!
+                            local petName = petData.NameTag or petData.Name or petData.Id or petData.Type or petKey
+                            petNames = petNames .. "\n" .. petCount .. ". " .. tostring(petName) .. " (Key: " .. tostring(petKey):sub(1,8) .. "...)"
+                        else
+                            petNames = petNames .. "\n" .. petCount .. ". " .. tostring(petKey) .. " = " .. tostring(petData)
+                        end
+                    end
+
+                    if petCount > 0 then
+                        Fluent:Notify({Title = "🐾 Pets Found: " .. petCount, Content = petNames, Duration = 10})
+                    else
+                        Fluent:Notify({Title = "⚠️ No Pets", Content = "ไม่พบ Pets ใน Inventory!", Duration = 5})
+                    end
+                else
+                    Fluent:Notify({Title = "❌ Error", Content = "ไม่มี Pets category ใน Inventory!", Duration = 5})
+                end
+            end)
+        end)
+    end
+})
+
 local SendMailToggle = Tabs.Trade:AddToggle("AutoSendMailToggle", {Title = "Auto SendMail (Seeds, Gears, Pets)", Default = false })
 SendMailToggle:OnChanged(function()
     if Options.AutoSendMailToggle.Value then
         AutoSendMailTask = task.spawn(function()
             local Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
             local PlayerStateClient = require(game:GetService("ReplicatedStorage").ClientModules.PlayerStateClient)
+            
             local sentTracker = {}
             local targetAmount = tonumber(Options.SendMailAmount.Value) or 0
+            
             while Options.AutoSendMailToggle.Value and getgenv().Gag2RunningID == currentID do
                 pcall(function()
                     local targetName = Options.TargetPlayerMail.Value
@@ -1305,13 +1351,14 @@ SendMailToggle:OnChanged(function()
                                 TargetUserIdCache[targetName] = r
                             end
                         end
+                        
                         if targetUserId then
                             local inventory = PlayerStateClient.GetLocalReplica().Data.Inventory
                             local itemsToSend = {}
+                            
                             local selSeeds = Options.SelectSeedToSend.Value
                             local selGears = Options.SelectGearToSend.Value
-                            local selPets = Options.SelectPetToSend.Value
-
+                            
                             local isAllSeeds = false
                             local seedsDict = {}
                             if type(selSeeds) == "table" then
@@ -1321,7 +1368,7 @@ SendMailToggle:OnChanged(function()
                                     if v == true or type(k) == "number" then seedsDict[name] = true end
                                 end
                             end
-
+                            
                             local isAllGears = false
                             local gearsDict = {}
                             if type(selGears) == "table" then
@@ -1331,7 +1378,8 @@ SendMailToggle:OnChanged(function()
                                     if v == true or type(k) == "number" then gearsDict[name] = true end
                                 end
                             end
-
+                            
+                            local selPets = Options.SelectPetToSend.Value
                             local isAllPets = false
                             local petsDict = {}
                             if type(selPets) == "table" then
@@ -1341,38 +1389,86 @@ SendMailToggle:OnChanged(function()
                                     if name ~= "None" and (v == true or type(k) == "number") then petsDict[name] = true end
                                 end
                             end
+                            
+                            -- ✅ วิธีใหม่: แยกการประมวลผล Pets, Seeds, Gears แยกกัน
 
+                            -- 🐾 ส่ง Pets (โครงสร้างพิเศษ - table)
+                            if inventory.Pets and type(inventory.Pets) == "table" then
+                                for petKey, petData in pairs(inventory.Pets) do
+                                    if type(petData) == "table" then
+                                        -- ✅ FIX: ใช้ NameTag แทน PetName!
+                                        local petName = petData.NameTag or petData.Name or petData.Id or petData.Type or petKey
+
+                                        -- ลองจับคู่ชื่อ Pet กับที่เลือก (ไม่สนใจ case)
+                                        local matchedPetName = nil
+                                        if isAllPets then
+                                            matchedPetName = petName
+                                        else
+                                            local lowerPetName = string.lower(tostring(petName))
+                                            for selectedPet, _ in pairs(petsDict) do
+                                                local lowerSelected = string.lower(tostring(selectedPet))
+                                                if string.find(lowerPetName, lowerSelected) or string.find(lowerSelected, lowerPetName) then
+                                                    matchedPetName = petName
+                                                    break
+                                                end
+                                            end
+                                        end
+
+                                        if matchedPetName then
+                                            local shouldSend = true
+
+                                            -- เช็ค target amount
+                                            if targetAmount > 0 then
+                                                local sent = sentTracker[matchedPetName] or 0
+                                                if sent >= targetAmount then
+                                                    shouldSend = false
+                                                else
+                                                    sentTracker[matchedPetName] = sent + 1
+                                                end
+                                            end
+
+                                            if shouldSend then
+                                                table.insert(itemsToSend, {
+                                                    Category = "Pets",
+                                                    ItemKey = petKey,  -- ✅ ใช้ UUID เต็ม!
+                                                    Count = 1
+                                                })
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+
+                            -- 🌱 ส่ง Seeds และ ⚙️ Gears (โครงสร้างปกติ - number)
                             for category, categoryItems in pairs(inventory) do
-                                if category ~= "HarvestedFruits" then
+                                if category ~= "HarvestedFruits" and category ~= "Pets" then
                                     for itemKey, count in pairs(categoryItems) do
-                                        if count > 0 then
+                                        if type(count) == "number" and count > 0 then
                                             local shouldSend = false
+                                            local finalCount = count
 
                                             if category == "Seeds" then
                                                 if isAllSeeds or seedsDict[itemKey] then
                                                     shouldSend = true
                                                 end
-                                            elseif category == "Pets" then
-                                                if isAllPets or petsDict[itemKey] then
-                                                    shouldSend = true
-                                                end
                                             else
+                                                -- Gears และอื่นๆ
                                                 if isAllGears or gearsDict[itemKey] then
                                                     shouldSend = true
                                                 end
                                             end
 
                                             if shouldSend then
-                                                local finalCount = count
                                                 if targetAmount > 0 then
                                                     local sent = sentTracker[itemKey] or 0
                                                     if sent >= targetAmount then
                                                         shouldSend = false
                                                     else
-                                                        finalCount = math.min(count, targetAmount - sent)
+                                                        finalCount = math.min(finalCount, targetAmount - sent)
                                                         sentTracker[itemKey] = sent + finalCount
                                                     end
                                                 end
+
                                                 if shouldSend and finalCount > 0 then
                                                     table.insert(itemsToSend, {
                                                         Category = category,
@@ -1385,6 +1481,7 @@ SendMailToggle:OnChanged(function()
                                     end
                                 end
                             end
+                            
                             if #itemsToSend > 0 then
                                 local batch = {}
                                 for _, item in ipairs(itemsToSend) do
@@ -1413,6 +1510,7 @@ SendMailToggle:OnChanged(function()
         end
     end
 end)
+
 Tabs.Trade:AddButton({
     Title = "Send Mail (Once)",
     Description = "Send the selected items to the target player one time",
@@ -1420,11 +1518,13 @@ Tabs.Trade:AddButton({
         task.spawn(function()
             local Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
             local PlayerStateClient = require(game:GetService("ReplicatedStorage").ClientModules.PlayerStateClient)
+            
             local targetName = Options.TargetPlayerMail.Value
             if not targetName or targetName == "" then 
                 Fluent:Notify({ Title = "Warning", Content = "Please enter Target Player Name!", Duration = 3 })
                 return 
             end
+            
             local targetUserId = TargetUserIdCache[targetName]
             if not targetUserId then
                 local s, r = pcall(function() return game.Players:GetUserIdFromNameAsync(targetName) end)
@@ -1436,13 +1536,14 @@ Tabs.Trade:AddButton({
                     return
                 end
             end
+            
             local inventory = PlayerStateClient.GetLocalReplica().Data.Inventory
             local itemsToSend = {}
             local targetAmount = tonumber(Options.SendMailAmount.Value) or 0
+            
             local selSeeds = Options.SelectSeedToSend.Value
             local selGears = Options.SelectGearToSend.Value
-            local selPets = Options.SelectPetToSend.Value
-
+            
             local isAllSeeds = false
             local seedsDict = {}
             if type(selSeeds) == "table" then
@@ -1452,7 +1553,7 @@ Tabs.Trade:AddButton({
                     if v == true or type(k) == "number" then seedsDict[name] = true end
                 end
             end
-
+            
             local isAllGears = false
             local gearsDict = {}
             if type(selGears) == "table" then
@@ -1462,7 +1563,8 @@ Tabs.Trade:AddButton({
                     if v == true or type(k) == "number" then gearsDict[name] = true end
                 end
             end
-
+            
+            local selPets = Options.SelectPetToSend.Value
             local isAllPets = false
             local petsDict = {}
             if type(selPets) == "table" then
@@ -1472,26 +1574,75 @@ Tabs.Trade:AddButton({
                     if name ~= "None" and (v == true or type(k) == "number") then petsDict[name] = true end
                 end
             end
+            
+            -- ✅ วิธีใหม่: แยกการประมวลผล Pets, Seeds, Gears แยกกัน
 
+            -- 🐾 ส่ง Pets (โครงสร้างพิเศษ - table)
+            if inventory.Pets and type(inventory.Pets) == "table" then
+                for petKey, petData in pairs(inventory.Pets) do
+                    if type(petData) == "table" then
+                        -- ✅ FIX: ใช้ NameTag แทน PetName!
+                        local petName = petData.NameTag or petData.Name or petData.Id or petData.Type or petKey
+
+                        -- ลองจับคู่ชื่อ Pet กับที่เลือก (ไม่สนใจ case)
+                        local matchedPetName = nil
+                        if isAllPets then
+                            matchedPetName = petName
+                        else
+                            local lowerPetName = string.lower(tostring(petName))
+                            for selectedPet, _ in pairs(petsDict) do
+                                local lowerSelected = string.lower(tostring(selectedPet))
+                                if string.find(lowerPetName, lowerSelected) or string.find(lowerSelected, lowerPetName) then
+                                    matchedPetName = petName
+                                    break
+                                end
+                            end
+                        end
+
+                        if matchedPetName then
+                            local finalCount = 1
+
+                            -- เช็ค target amount
+                            if targetAmount > 0 then
+                                finalCount = math.min(1, targetAmount)
+                            end
+
+                            if finalCount > 0 then
+                                table.insert(itemsToSend, {
+                                    Category = "Pets",
+                                    ItemKey = petKey,  -- ✅ ใช้ UUID เต็ม!
+                                    Count = 1
+                                })
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- 🌱 ส่ง Seeds และ ⚙️ Gears (โครงสร้างปกติ - number)
             for category, categoryItems in pairs(inventory) do
-                if category ~= "HarvestedFruits" then
+                if category ~= "HarvestedFruits" and category ~= "Pets" then
                     for itemKey, count in pairs(categoryItems) do
-                        if count > 0 then
+                        if type(count) == "number" and count > 0 then
                             local shouldSend = false
+                            local finalCount = count
 
                             if category == "Seeds" then
-                                if isAllSeeds or seedsDict[itemKey] then shouldSend = true end
-                            elseif category == "Pets" then
-                                if isAllPets or petsDict[itemKey] then shouldSend = true end
+                                if isAllSeeds or seedsDict[itemKey] then
+                                    shouldSend = true
+                                end
                             else
-                                if isAllGears or gearsDict[itemKey] then shouldSend = true end
+                                -- Gears และอื่นๆ
+                                if isAllGears or gearsDict[itemKey] then
+                                    shouldSend = true
+                                end
                             end
 
                             if shouldSend then
-                                local finalCount = count
                                 if targetAmount > 0 then
-                                    finalCount = math.min(count, targetAmount)
+                                    finalCount = math.min(finalCount, targetAmount)
                                 end
+
                                 if finalCount > 0 then
                                     table.insert(itemsToSend, {
                                         Category = category,
@@ -1504,6 +1655,7 @@ Tabs.Trade:AddButton({
                     end
                 end
             end
+            
             if #itemsToSend > 0 then
                 local batch = {}
                 for _, item in ipairs(itemsToSend) do
@@ -1775,6 +1927,53 @@ local PetDropdown = Tabs.Pets:AddDropdown("SelectPetToBuy", {
     Default = {"All"},
 })
 local AutoBuyPetTask
+local AutoProtectPetToggle = Tabs.Pets:AddToggle("AutoProtectPetToggle", {Title = "🛡️ Auto Protect Pet (Kill Aura)", Default = false })
+
+local function ProtectPet(obj, lp)
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    local startProtectTime = os.clock()
+    while obj and obj.Parent and obj:IsDescendantOf(workspace) do
+        -- ออกถ้านานเกินไป (90 วิ)
+        if os.clock() - startProtectTime > 90 then break end
+        
+        pcall(function()
+            local targetPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
+            if targetPart then
+                -- วาร์ปตามสัตว์
+                hrp.CFrame = targetPart.CFrame * CFrame.new(0, 2, 0)
+                
+                -- สแกนผู้เล่นใกล้ๆ เพื่อตีด้วย Shovel
+                local shovel = char:FindFirstChild("Shovel") or (lp:FindFirstChild("Backpack") and lp.Backpack:FindFirstChild("Shovel"))
+                for _, player in ipairs(game.Players:GetPlayers()) do
+                    if player ~= lp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        local targetHrp = player.Character.HumanoidRootPart
+                        local distance = (targetHrp.Position - targetPart.Position).Magnitude
+                        -- รัศมีที่ให้ใครเข้าใกล้ไม่ได้
+                        if distance <= 25 then
+                            if shovel then
+                                local hum = char:FindFirstChild("Humanoid")
+                                if hum and shovel.Parent ~= char then
+                                    hum:EquipTool(shovel)
+                                end
+                                
+                                local oldCFrame = hrp.CFrame
+                                hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(math.random(0, 360)), 0)
+                                shovel:Activate()
+                                task.wait(0.05)
+                                hrp.CFrame = oldCFrame
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        task.wait(0.1)
+    end
+end
+
 local BuyPetToggle = Tabs.Pets:AddToggle("AutoBuyPetToggle", {Title = "Auto Buy Selected Pets", Default = false })
 BuyPetToggle:OnChanged(function()
     if Options.AutoBuyPetToggle.Value then
@@ -1861,9 +2060,15 @@ BuyPetToggle:OnChanged(function()
                                                 local oldHold = prompt.HoldDuration
                                                 prompt.HoldDuration = 0
 
-                                                -- ลองกดหลายครั้ง
+                                                -- ลองกดหลายครั้งและบังคับซื้อผ่าน Network
                                                 for i = 1, 10 do
-                                                    fireproximityprompt(prompt)
+                                                    if fireproximityprompt then
+                                                        fireproximityprompt(prompt)
+                                                    end
+                                                    pcall(function()
+                                                        local Net = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
+                                                        Net.Pets.WildPetTame:Fire(obj.Name)
+                                                    end)
                                                     task.wait(0.2)
                                                 end
 
@@ -1883,25 +2088,15 @@ BuyPetToggle:OnChanged(function()
                                                 -- ตรวจสอบว่าสัตว์หายไปหรือยัง
                                                 if not obj or not obj.Parent or not prompt.Enabled then
                                                     Fluent:Notify({Title = "สำเร็จ!", Content = "ซื้อ " .. actualPetName .. " สำเร็จแล้ว!", Duration = 5})
+                                                    if Options.AutoProtectPetToggle.Value then
+                                                        Fluent:Notify({Title = "🛡️ คุ้มครอง!", Content = "กำลังคุ้มครองสัตว์เข้าแปลง...", Duration = 3})
+                                                        ProtectPet(obj, lp)
+                                                    end
                                                     break
                                                 end
                                             end
 
-                                            -- รอก่อนวาร์ปกลับ
-                                            task.wait(2)
-
-                                            -- วาร์ปกลับแปลง
-                                            local plotId = lp:GetAttribute("PlotId")
-                                            if plotId then
-                                                local plot = workspace.Gardens:FindFirstChild("Plot" .. tostring(plotId))
-                                                if plot then
-                                                    local plotPart = plot.PrimaryPart or plot:FindFirstChild("SpawnPoint") or plot:FindFirstChildWhichIsA("BasePart")
-                                                    if plotPart then
-                                                        hrp.CFrame = plotPart.CFrame * CFrame.new(0, 10, 0)
-                                                        task.wait(1)
-                                                    end
-                                                end
-                                            end
+                                            -- ❌ ลบการวาร์ปกลับออก! ให้ฟังก์ชัน ProtectPet ดูแลต่อ
                                         end
                                     end
                                 end
@@ -2012,7 +2207,13 @@ HopPetToggle:OnChanged(function()
                                                     prompt.HoldDuration = 0
 
                                                     for i = 1, 10 do
-                                                        fireproximityprompt(prompt)
+                                                        if fireproximityprompt then
+                                                            fireproximityprompt(prompt)
+                                                        end
+                                                        pcall(function()
+                                                            local Net = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
+                                                            Net.Pets.WildPetTame:Fire(obj.Name)
+                                                        end)
                                                         task.wait(0.2)
                                                     end
 
@@ -2030,14 +2231,17 @@ HopPetToggle:OnChanged(function()
 
                                                     if not obj or not obj.Parent or not prompt.Enabled then
                                                         Fluent:Notify({Title = "สำเร็จ!", Content = "ซื้อ " .. petName .. " สำเร็จ!", Duration = 5})
+                                                        if Options.AutoProtectPetToggle.Value then
+                                                            Fluent:Notify({Title = "🛡️ คุ้มครอง!", Content = "กำลังคุ้มครองสัตว์เข้าแปลง...", Duration = 3})
+                                                            ProtectPet(obj, lp)
+                                                        end
                                                         break
                                                     end
                                                 end
                                             end
                                         end
                                     end
-                                    HopPetToggle:SetValue(false)
-                                    return
+                                    -- ❌ ไม่ต้อง return เพื่อให้ไปต่อที่การคุ้มครอง
                                 end
                             end
                         end
