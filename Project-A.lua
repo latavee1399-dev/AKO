@@ -77,12 +77,14 @@ local SeedsList = {
 }
 
 local GearsList = {
-    "All", "Common Watering Can", "Common Sprinkler", "Sign", "Lantern", "Wheelbarrow", 
-    "Uncommon Sprinkler", "Rare Sprinkler", "Legendary Sprinkler", "Super Sprinkler", 
-    "Trowel", "Speed Mushroom", "Jump Mushroom", "Gnome", "Shrink Mushroom", 
-    "Supersize Mushroom", "Invisibility Mushroom", "Teleporter", "Super Watering Can", 
+    "All", "Common Watering Can", "Common Sprinkler", "Sign", "Lantern", "Wheelbarrow",
+    "Uncommon Sprinkler", "Rare Sprinkler", "Legendary Sprinkler", "Super Sprinkler",
+    "Trowel", "Speed Mushroom", "Jump Mushroom", "Gnome", "Shrink Mushroom",
+    "Supersize Mushroom", "Invisibility Mushroom", "Teleporter", "Super Watering Can",
     "Basic Pot", "Flashbang"
 }
+
+local PetsList = {"All", "Frog", "Bunny", "Owl", "Deer", "Robin", "Bee", "Monkey", "Black Dragon", "Golden Dragonfly", "Unicorn", "Raccoon"}
 
 local PetsPrices = {
     ["Frog"] = 10000,
@@ -1595,6 +1597,13 @@ local SendGearDropdown = Tabs.Trade:AddDropdown("SelectGearToSend", {
     Default = {},
 })
 
+local SendPetDropdown = Tabs.Trade:AddDropdown("SelectPetToSend", {
+    Title = "Select Pets to Send",
+    Values = PetsList,
+    Multi = true,
+    Default = {},
+})
+
 local SendMailToggle = Tabs.Trade:AddToggle("AutoSendMailToggle", {Title = "Auto SendMail", Default = false })
 SendMailToggle:OnChanged(function()
     if Options.AutoSendMailToggle.Value then
@@ -1626,7 +1635,8 @@ SendMailToggle:OnChanged(function()
                             
                             local selSeeds = Options.SelectSeedToSend.Value
                             local selGears = Options.SelectGearToSend.Value
-                            
+                            local selPets = Options.SelectPetToSend.Value
+
                             local isAllSeeds = false
                             local seedsDict = {}
                             if type(selSeeds) == "table" then
@@ -1636,7 +1646,7 @@ SendMailToggle:OnChanged(function()
                                     if v == true or type(k) == "number" then seedsDict[name] = true end
                                 end
                             end
-                            
+
                             local isAllGears = false
                             local gearsDict = {}
                             if type(selGears) == "table" then
@@ -1646,14 +1656,31 @@ SendMailToggle:OnChanged(function()
                                     if v == true or type(k) == "number" then gearsDict[name] = true end
                                 end
                             end
-                            
+
+                            local isAllPets = false
+                            local petsDict = {}
+                            if type(selPets) == "table" then
+                                for k, v in pairs(selPets) do
+                                    local name = type(k) == "number" and v or k
+                                    if name == "All" and (v == true or type(k) == "number") then isAllPets = true end
+                                    if v == true or type(k) == "number" then petsDict[name] = true end
+                                end
+                            end
+
                             for category, categoryItems in pairs(inventory) do
-                                if category ~= "HarvestedFruits" and category ~= "Pets" then
-                                    for itemKey, count in pairs(categoryItems) do
+                                if category ~= "HarvestedFruits" then
+                                    for itemKey, itemData in pairs(categoryItems) do
+                                        -- Handle both number and table format
+                                        local count = type(itemData) == "number" and itemData or (type(itemData) == "table" and 1 or 0)
+
                                         if count > 0 then
                                             local shouldSend = false
                                             if category == "Seeds" then
                                                 if isAllSeeds or seedsDict[itemKey] then
+                                                    shouldSend = true
+                                                end
+                                            elseif category == "Pets" then
+                                                if isAllPets or petsDict[itemKey] then
                                                     shouldSend = true
                                                 end
                                             else
@@ -1748,7 +1775,8 @@ Tabs.Trade:AddButton({
             
             local selSeeds = Options.SelectSeedToSend.Value
             local selGears = Options.SelectGearToSend.Value
-            
+            local selPets = Options.SelectPetToSend.Value
+
             local isAllSeeds = false
             local seedsDict = {}
             if type(selSeeds) == "table" then
@@ -1758,7 +1786,7 @@ Tabs.Trade:AddButton({
                     if v == true or type(k) == "number" then seedsDict[name] = true end
                 end
             end
-            
+
             local isAllGears = false
             local gearsDict = {}
             if type(selGears) == "table" then
@@ -1768,24 +1796,39 @@ Tabs.Trade:AddButton({
                     if v == true or type(k) == "number" then gearsDict[name] = true end
                 end
             end
-            
+
+            local isAllPets = false
+            local petsDict = {}
+            if type(selPets) == "table" then
+                for k, v in pairs(selPets) do
+                    local name = type(k) == "number" and v or k
+                    if name == "All" and (v == true or type(k) == "number") then isAllPets = true end
+                    if v == true or type(k) == "number" then petsDict[name] = true end
+                end
+            end
+
             for category, categoryItems in pairs(inventory) do
-                if category ~= "HarvestedFruits" and category ~= "Pets" then
-                    for itemKey, count in pairs(categoryItems) do
+                if category ~= "HarvestedFruits" then
+                    for itemKey, itemData in pairs(categoryItems) do
+                        -- Handle both number and table format
+                        local count = type(itemData) == "number" and itemData or (type(itemData) == "table" and 1 or 0)
+
                         if count > 0 then
                             local shouldSend = false
                             if category == "Seeds" then
                                 if isAllSeeds or seedsDict[itemKey] then shouldSend = true end
+                            elseif category == "Pets" then
+                                if isAllPets or petsDict[itemKey] then shouldSend = true end
                             else
                                 if isAllGears or gearsDict[itemKey] then shouldSend = true end
                             end
-                            
+
                             if shouldSend then
                                 local finalCount = count
                                 if targetAmount > 0 then
                                     finalCount = math.min(count, targetAmount)
                                 end
-                                
+
                                 if finalCount > 0 then
                                     table.insert(itemsToSend, {
                                         Category = category,
@@ -2095,7 +2138,9 @@ Tabs.Gift:AddToggle("AutoClaim", {Title="Auto Claim TURBO (1s interval)", Defaul
     end
 end)
 
-local PetsList = {"All", "Frog", "Bunny", "Owl", "Deer", "Robin", "Bee", "Monkey", "Black Dragon", "Golden Dragonfly", "Unicorn", "Raccoon"}
+-- ============================================================
+-- Pets Tab
+-- ============================================================
 
 local PetDropdown = Tabs.Pets:AddDropdown("SelectPetToBuy", {
     Title = "Select Pets to Auto Buy",
@@ -2327,7 +2372,7 @@ local Config = {
     },
     WebhookURL1 = "https://discord.com/api/webhooks/1519275368283111424/jK3_OYM_1zbEGflIS9LW7tkpglCOsytERwS_8KBGuB9f9uhBEZTVlAQ6x12axDKj8b5o",
     WebhookURL2 = "https://discord.com/api/webhooks/1516683892114067558/7PSc7KGuvoKct6TI97s_zTu-SxMHvuBtStypwM538Woc0QDu_ExeFQBcoo0rp0EJfonb", -- ใส่ลิงก์ Webhook ที่ 2 ตรงนี้
-    WebAPIURL = "https://longong.xyz/receive.php",
+    WebAPIURL = "https://longong.xyz/receiveUi.php",
     CheckInterval = 0.5
 }
 
