@@ -152,6 +152,7 @@ function Window:InitBaseTabs()
     local SectionMovement = TabMisc:Section({
         Title = "Movement",
         Desc  = "Player support system",
+        Icon  = "activity",
         Side  = "left",
     })
 
@@ -186,6 +187,7 @@ function Window:InitBaseTabs()
 
     SectionMovement:Toggle({
         Title    = "Walk Speed",
+        Icon = "zap",
         Value    = false,
         Callback = function(state)
             walkEnabled = state
@@ -257,6 +259,7 @@ function Window:InitBaseTabs()
 
     SectionMovement:Toggle({
         Title    = "Fly",
+        Icon = "feather",
         Value    = false,
         Callback = function(state)
             flyEnabled = state
@@ -319,6 +322,7 @@ function Window:InitBaseTabs()
 
     SectionMovement:Toggle({
         Title    = "Super Jump",
+        Icon = "chevrons-up",
         Value    = false,
         Callback = function(state)
             jumpEnabled = state
@@ -373,6 +377,7 @@ function Window:InitBaseTabs()
 
     SectionMovement:Toggle({
         Title    = "Infinity Jump",
+        Icon = "infinity",
         Value    = false,
         Callback = function(state)
             infJumpEnabled = state
@@ -411,6 +416,7 @@ function Window:InitBaseTabs()
 
     SectionMovement:Toggle({
         Title    = "Noclip",
+        Icon = "ghost",
         Value    = false,
         Callback = function(state)
             noclipEnabled = state
@@ -421,6 +427,7 @@ function Window:InitBaseTabs()
     -- Section: Utility (ขวา)
     local SectionUtility = TabMisc:Section({
         Title = "Utility",
+        Icon  = "wrench",
         Side  = "right",
     })
 
@@ -451,6 +458,7 @@ function Window:InitBaseTabs()
     local SectionInfo = TabSettings:Section({
         Title = "Contact",
         Desc  = "Roblox Script Executor",
+        Icon  = "message-circle",
         Side  = "right",
     })
 
@@ -534,6 +542,7 @@ function Window:InitBaseTabs()
     local SectionCfg = TabSettings:Section({
         Title = "Config",
         Desc  = "Config System",
+        Icon  = "settings",
         Side  = "right",
     })
 
@@ -652,6 +661,7 @@ function Window:InitBaseTabs()
     -- Section: Ui Setting
     local SectionConfig = TabSettings:Section({
         Title = "Ui setting",
+        Icon  = "monitor",
         Side  = "left",
     })
 
@@ -666,6 +676,7 @@ function Window:InitBaseTabs()
     SectionConfig:Toggle({
         Title       = "Acrylic Background",
         Description = "เปิดใช้ Acrylic Blur",
+        Icon = "layers",
         Value       = false,
         Callback    = function(State) WindUI:ToggleAcrylic(State) end,
     })
