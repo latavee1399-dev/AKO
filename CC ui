@@ -446,6 +446,27 @@ function Window:InitBaseTabs()
         end,
     })
 
+    -- Advanced Anti-AFK (Auto Background)
+    task.spawn(function()
+        local VirtualUser = game:GetService("VirtualUser")
+        
+        if getconnections then
+            for _, v in pairs(getconnections(LocalPlayer.Idled)) do
+                if v["Disable"] then
+                    v:Disable()
+                elseif v["Disconnect"] then
+                    v:Disconnect()
+                end
+            end
+        end
+        
+        LocalPlayer.Idled:Connect(function()
+            VirtualUser:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+            task.wait(1)
+            VirtualUser:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+        end)
+    end)
+
     -- =============================================
     -- แท็ป : Settings
     -- =============================================
