@@ -145,6 +145,7 @@ function Window:InitBaseTabs()
 
     local TabMisc = self:Tab({
         Title = "Misc",
+        Desc = "System Support Player",
         Icon  = "wrench",
     })
 
@@ -451,6 +452,7 @@ function Window:InitBaseTabs()
 
     local TabSettings = self:Tab({
         Title = "Settings",
+        Desc = "System Settings",
         Icon  = "settings",
     })
 
