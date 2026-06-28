@@ -1,5 +1,5 @@
 -- =============================================
---  Chick Chick Hub | WindUI Edition
+--  Chick Chick Hub | Base UI Module (UI CC)
 --  Created with WindUI by Footagesus
 -- =============================================
 
@@ -11,20 +11,93 @@ local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/rel
 
 WindUI:SetNotificationLower(true)
 
--- =============================================
--- สร้าง Window หลัก
--- =============================================
-
 local Window = WindUI:CreateWindow({
     Title = "Chick Chick Hub",
-    Icon = "rbxassetid://127819735797183",
-    Author = "Created By Ao Pro Free",
+    Icon = "rbxassetid://111710478480668",
+    Author = "Roblox Script ",
     Folder = "GAG2Hub",
     Size = UDim2.fromOffset(580, 460),
     Transparent = true,
-    Theme = "Sky",
+    Theme = "Amber",
     SideBarWidth = 200,
 })
+
+-- แนบ WindUI ไปกับ Window เพื่อให้สคริปต์อื่นเรียกใช้ได้
+Window.WindUI = WindUI
+
+-- =============================================
+-- Tags (FPS & Ping)
+-- =============================================
+
+Window:Tag({
+    Title = "AoProFree",
+    Icon = "star", -- optional
+    Color = Color3.fromRGB(160, 196, 255), -- custom color
+})
+
+local FPSTag = Window:Tag({
+    Title = "FPS: 0",
+    Color = Color3.fromRGB(100, 150, 255),
+})
+
+local _RunService = game:GetService("RunService")
+local lastUpdate = tick()
+local frameCount = 0
+
+-- ป้องกัน Loop ซ้อนทับเวลารันสคริปต์หลายครั้ง
+if _G._gag2_fpsLoop then _G._gag2_fpsLoop:Disconnect() end
+_G._gag2_fpsLoop = _RunService.RenderStepped:Connect(function()
+    frameCount = frameCount + 1
+    local now = tick()
+    
+    if now - lastUpdate >= 1 then
+        local fps = math.floor(frameCount / (now - lastUpdate))
+        FPSTag:SetTitle("FPS: " .. fps)
+        
+        if fps >= 50 then
+            FPSTag:SetColor(Color3.fromRGB(0, 255, 0)) -- Green
+        elseif fps >= 30 then
+            FPSTag:SetColor(Color3.fromRGB(255, 200, 0)) -- Yellow
+        else
+            FPSTag:SetColor(Color3.fromRGB(255, 0, 0)) -- Red
+        end
+        
+        frameCount = 0
+        lastUpdate = now
+    end
+end)
+
+local PingTag = Window:Tag({
+    Title = "Ping: 0ms",
+    Color = Color3.fromRGB(100, 200, 255),
+})
+
+if _G._gag2_pingLoop then task.cancel(_G._gag2_pingLoop) end
+_G._gag2_pingLoop = task.spawn(function()
+    while true do
+        local success, ping = pcall(function()
+            local Stats = game:GetService("Stats")
+            local pingValue = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+            return math.floor(pingValue)
+        end)
+        
+        if success and ping then
+            PingTag:SetTitle("Ping: " .. ping .. "ms")
+            
+            if ping <= 50 then
+                PingTag:SetColor(Color3.fromRGB(0, 255, 0)) -- Green
+            elseif ping <= 100 then
+                PingTag:SetColor(Color3.fromRGB(255, 200, 0)) -- Yellow
+            elseif ping <= 200 then
+                PingTag:SetColor(Color3.fromRGB(255, 150, 0)) -- Orange
+            else
+                PingTag:SetColor(Color3.fromRGB(255, 0, 0)) -- Red
+            end
+        end
+        
+        task.wait(2)
+    end
+end)
 
 -- =============================================
 -- ฟังก์ชัน Copy อัตโนมัติ รองรับทุก Executor
@@ -42,28 +115,10 @@ local function copyToClipboard(text)
     end
 end
 
--- =============================================
--- แท็ป : Misc (ลำดับที่ 1)
--- =============================================
-
-local TabMisc = Window:Tab({
-    Title = "Misc",
-    Icon  = "wrench",
-})
-
--- =============================================
--- Section: Movement (ซ้าย)
--- =============================================
-
-local SectionMovement = TabMisc:Section({
-    Title = "Movement",
-    Desc  = "Player support system",
-    Side  = "left",
-})
-
 local Players     = game:GetService("Players")
 local RunService  = game:GetService("RunService")
 local UIS         = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
 local function getChar() return LocalPlayer.Character end
@@ -76,552 +131,681 @@ local function getRoot()
     return c and c:FindFirstChild("HumanoidRootPart")
 end
 
--- ── Walk Speed ───────────────────────────────
+-- =============================================
+-- ฟังก์ชันสำหรับสร้างแท็บพื้นฐาน (Misc & Settings)
+-- =============================================
+-- ให้ผู้ใช้เรียก Window:InitBaseTabs() ตอนท้ายสุดของสคริปต์
+-- เพื่อให้แท็บพวกนี้ไปอยู่ด้านล่างสุดเสมอ
 
-local walkEnabled = false
-local walkSpeed   = 16
-local walkConn, walkRespConn
+function Window:InitBaseTabs()
+    
+    -- =============================================
+    -- แท็ป : Misc
+    -- =============================================
 
-local function applyWalkSpeed()
-    local hum = getHum()
-    if hum then hum.WalkSpeed = walkSpeed end
-end
+    local TabMisc = self:Tab({
+        Title = "Misc",
+        Icon  = "wrench",
+    })
 
-local function startWalkSpeed()
-    if walkConn then walkConn:Disconnect() end
-    walkConn = RunService.Heartbeat:Connect(function()
-        if walkEnabled then applyWalkSpeed() end
-    end)
-    if walkRespConn then walkRespConn:Disconnect() end
-    walkRespConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(0.1)
-        if walkEnabled then applyWalkSpeed() end
-    end)
-end
+    -- Section: Movement
+    local SectionMovement = TabMisc:Section({
+        Title = "Movement",
+        Desc  = "Player support system",
+        Side  = "left",
+    })
 
-local function stopWalkSpeed()
-    if walkConn     then walkConn:Disconnect();     walkConn     = nil end
-    if walkRespConn then walkRespConn:Disconnect(); walkRespConn = nil end
-    local hum = getHum()
-    if hum then hum.WalkSpeed = 16 end
-end
+    -- ── Walk Speed ───────────────────────────────
+    local walkEnabled = false
+    local walkSpeed   = 16
+    local walkConn, walkRespConn
 
-SectionMovement:Toggle({
-    Title    = "Walk Speed",
-    Value    = false,
-    Callback = function(state)
-        walkEnabled = state
-        if state then startWalkSpeed() else stopWalkSpeed() end
-    end,
-})
-
-SectionMovement:Slider({
-    Title    = "Walk Speed Value",
-    Value = {
-        Min = 10,
-        Max = 150,
-        Default = 16
-    },
-    Step = 1,
-    Callback = function(val)
-        walkSpeed = val
-        if walkEnabled then applyWalkSpeed() end
-    end,
-})
-
--- ── Fly ──────────────────────────────────────
-
-local flyEnabled = false
-local flySpeed   = 10
-local flyPart, flyConn, flyRespConn
-
-local function stopFly()
-    flyEnabled = false
-    if flyConn then flyConn:Disconnect(); flyConn = nil end
-    if flyPart then flyPart:Destroy();    flyPart = nil end
-    local hum = getHum()
-    if hum then hum.PlatformStand = false end
-end
-
-local function startFly()
-    local root = getRoot()
-    local hum  = getHum()
-    if not root or not hum then return end
-    hum.PlatformStand = true
-    flyPart = Instance.new("Part")
-    flyPart.Size         = Vector3.new(1,1,1)
-    flyPart.CanCollide   = false
-    flyPart.Anchored     = true
-    flyPart.Transparency = 1
-    flyPart.Parent       = workspace
-    local cam = workspace.CurrentCamera
-    if flyConn then flyConn:Disconnect() end
-    flyConn = RunService.Heartbeat:Connect(function()
-        if not flyEnabled then return end
-        local r = getRoot()
-        if not r then stopFly(); return end
-        flyPart.CFrame = r.CFrame
-        local mv = Vector3.zero
-        if UIS:IsKeyDown(Enum.KeyCode.W)         then mv = mv + cam.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.S)         then mv = mv - cam.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.A)         then mv = mv - cam.CFrame.RightVector end
-        if UIS:IsKeyDown(Enum.KeyCode.D)         then mv = mv + cam.CFrame.RightVector end
-        if UIS:IsKeyDown(Enum.KeyCode.Space)     then mv = mv + Vector3.new(0,1,0) end
-        if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then mv = mv - Vector3.new(0,1,0) end
-        if mv.Magnitude > 0 then mv = mv.Unit end
-        r.Velocity = mv * flySpeed
-    end)
-    if flyRespConn then flyRespConn:Disconnect() end
-    flyRespConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(0.2)
-        if flyEnabled then startFly() end
-    end)
-end
-
-SectionMovement:Toggle({
-    Title    = "Fly",
-    Value    = false,
-    Callback = function(state)
-        flyEnabled = state
-        if state then startFly() else stopFly() end
-    end,
-})
-
-SectionMovement:Slider({
-    Title    = "Fly Speed",
-    Value = {
-        Min = 5,
-        Max = 50,
-        Default = 10
-    },
-    Step = 1,
-    Callback = function(val) flySpeed = val end,
-})
-
--- ── Super Jump ───────────────────────────────
-
-local jumpEnabled = false
-local jumpPower   = 50
-local jumpConn, jumpRespConn
-local origJumpPower = 50
-local origUseJumpPower = true
-
-local function applyJumpPower()
-    local hum = getHum()
-    if hum then
-        hum.UseJumpPower = true
-        hum.JumpPower = jumpPower
-    end
-end
-
-local function startSuperJump()
-    local hum = getHum()
-    if hum then
-        origJumpPower = hum.JumpPower
-        origUseJumpPower = hum.UseJumpPower
-    end
-    if jumpConn then jumpConn:Disconnect() end
-    jumpConn = RunService.Heartbeat:Connect(function()
-        if jumpEnabled then applyJumpPower() end
-    end)
-    if jumpRespConn then jumpRespConn:Disconnect() end
-    jumpRespConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(0.1)
-        if jumpEnabled then applyJumpPower() end
-    end)
-end
-
-local function stopSuperJump()
-    if jumpConn     then jumpConn:Disconnect();     jumpConn     = nil end
-    if jumpRespConn then jumpRespConn:Disconnect(); jumpRespConn = nil end
-    local hum = getHum()
-    if hum then
-        hum.JumpPower = origJumpPower
-        hum.UseJumpPower = origUseJumpPower
-    end
-end
-
-SectionMovement:Toggle({
-    Title    = "Super Jump",
-    Value    = false,
-    Callback = function(state)
-        jumpEnabled = state
-        if state then startSuperJump() else stopSuperJump() end
-    end,
-})
-
-SectionMovement:Slider({
-    Title    = "Jump Power",
-    Value = {
-        Min = 10,
-        Max = 200,
-        Default = 50
-    },
-    Step = 1,
-    Callback = function(val)
-        jumpPower = val 
-        if jumpEnabled then applyJumpPower() end
-    end,
-})
-
--- ── Infinity Jump ────────────────────────────
-
-local infJumpEnabled = false
-local infJumpConn, infJumpRespConn
-
--- ป้องกันสคริปต์ทำงานทับซ้อนกันจากการรันหลายรอบ
-if _G._gag2_infJumpConn then pcall(function() _G._gag2_infJumpConn:Disconnect() end) end
-if _G._gag2_infJumpResp then pcall(function() _G._gag2_infJumpResp:Disconnect() end) end
-
-local function startInfJump()
-    if infJumpConn then infJumpConn:Disconnect() end
-    infJumpConn = UIS.JumpRequest:Connect(function()
-        if not infJumpEnabled then return end
+    local function applyWalkSpeed()
         local hum = getHum()
-        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-    end)
-    _G._gag2_infJumpConn = infJumpConn
-
-    if infJumpRespConn then infJumpRespConn:Disconnect() end
-    infJumpRespConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(0.1)
-        if infJumpEnabled then startInfJump() end
-    end)
-    _G._gag2_infJumpResp = infJumpRespConn
-end
-
-local function stopInfJump()
-    if infJumpConn     then infJumpConn:Disconnect();     infJumpConn     = nil end
-    if infJumpRespConn then infJumpRespConn:Disconnect(); infJumpRespConn = nil end
-    if _G._gag2_infJumpConn then pcall(function() _G._gag2_infJumpConn:Disconnect() end); _G._gag2_infJumpConn = nil end
-    if _G._gag2_infJumpResp then pcall(function() _G._gag2_infJumpResp:Disconnect() end); _G._gag2_infJumpResp = nil end
-end
-
-SectionMovement:Toggle({
-    Title    = "Infinity Jump",
-    Value    = false,
-    Callback = function(state)
-        infJumpEnabled = state
-        if state then startInfJump() else stopInfJump() end
-    end,
-})
-
--- ── Noclip ───────────────────────────────────
-
-local noclipEnabled = false
-local noclipConn, noclipRespConn
-
-local function applyNoclip()
-    local c = getChar()
-    if not c then return end
-    for _, part in ipairs(c:GetDescendants()) do
-        if part:IsA("BasePart") then part.CanCollide = false end
+        if hum then hum.WalkSpeed = walkSpeed end
     end
-end
 
-local function startNoclip()
-    if noclipConn then noclipConn:Disconnect() end
-    noclipConn = RunService.Stepped:Connect(function()
-        if noclipEnabled then applyNoclip() end
-    end)
-    if noclipRespConn then noclipRespConn:Disconnect() end
-    noclipRespConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(0.1)
-        if noclipEnabled then startNoclip() end
-    end)
-end
+    local function startWalkSpeed()
+        if walkConn then walkConn:Disconnect() end
+        walkConn = RunService.Heartbeat:Connect(function()
+            if walkEnabled then applyWalkSpeed() end
+        end)
+        if walkRespConn then walkRespConn:Disconnect() end
+        walkRespConn = LocalPlayer.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            if walkEnabled then applyWalkSpeed() end
+        end)
+    end
 
-local function stopNoclip()
-    if noclipConn     then noclipConn:Disconnect();     noclipConn     = nil end
-    if noclipRespConn then noclipRespConn:Disconnect(); noclipRespConn = nil end
-    -- Humanoid will naturally restore collisions for character limbs on the next physics step.
-end
+    local function stopWalkSpeed()
+        if walkConn     then walkConn:Disconnect();     walkConn     = nil end
+        if walkRespConn then walkRespConn:Disconnect(); walkRespConn = nil end
+        local hum = getHum()
+        if hum then hum.WalkSpeed = 16 end
+    end
 
-SectionMovement:Toggle({
-    Title    = "Noclip",
-    Value    = false,
-    Callback = function(state)
-        noclipEnabled = state
-        if state then startNoclip() else stopNoclip() end
-    end,
-})
+    SectionMovement:Toggle({
+        Title    = "Walk Speed",
+        Value    = false,
+        Callback = function(state)
+            walkEnabled = state
+            if state then startWalkSpeed() else stopWalkSpeed() end
+        end,
+    })
 
--- =============================================
--- Section: Utility (ขวา)
--- =============================================
+    SectionMovement:Slider({
+        Title    = "Walk Speed Value",
+        Value = {
+            Min = 10,
+            Max = 150,
+            Default = 16
+        },
+        Step = 1,
+        Callback = function(val)
+            walkSpeed = val
+            if walkEnabled then applyWalkSpeed() end
+        end,
+    })
 
-local SectionUtility = TabMisc:Section({
-    Title = "Utility",
-    Side  = "right",
-})
+    -- ── Fly ──────────────────────────────────────
+    local flyEnabled = false
+    local flySpeed   = 10
+    local flyPart, flyConn, flyRespConn
 
-SectionUtility:Button({
-    Title       = "Copy Job ID",
-    Description = "Copy current server JobId",
-    Icon        = "clipboard",
-    Callback    = function()
-        local ok = copyToClipboard(game.JobId)
-        if ok then
-            WindUI:Notify({ Title = "Success", Content = "Job ID copied to clipboard", Duration = 3, Icon = "clipboard-check" })
-        else
-            WindUI:Notify({ Title = "Error",   Content = "Clipboard is not supported", Duration = 3, Icon = "alert-circle" })
-        end
-    end,
-})
+    local function stopFly()
+        flyEnabled = false
+        if flyConn then flyConn:Disconnect(); flyConn = nil end
+        if flyPart then flyPart:Destroy();    flyPart = nil end
+        local hum = getHum()
+        if hum then hum.PlatformStand = false end
+    end
 
--- =============================================
--- แท็ป : Settings (ลำดับที่ 2)
--- =============================================
+    local function startFly()
+        local root = getRoot()
+        local hum  = getHum()
+        if not root or not hum then return end
+        hum.PlatformStand = true
+        flyPart = Instance.new("Part")
+        flyPart.Size         = Vector3.new(1,1,1)
+        flyPart.CanCollide   = false
+        flyPart.Anchored     = true
+        flyPart.Transparency = 1
+        flyPart.Parent       = workspace
+        local cam = workspace.CurrentCamera
+        if flyConn then flyConn:Disconnect() end
+        flyConn = RunService.Heartbeat:Connect(function()
+            if not flyEnabled then return end
+            local r = getRoot()
+            if not r then stopFly(); return end
+            flyPart.CFrame = r.CFrame
+            local mv = Vector3.zero
+            if UIS:IsKeyDown(Enum.KeyCode.W)         then mv = mv + cam.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.S)         then mv = mv - cam.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.A)         then mv = mv - cam.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.D)         then mv = mv + cam.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.Space)     then mv = mv + Vector3.new(0,1,0) end
+            if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then mv = mv - Vector3.new(0,1,0) end
+            if mv.Magnitude > 0 then mv = mv.Unit end
+            r.Velocity = mv * flySpeed
+        end)
+        if flyRespConn then flyRespConn:Disconnect() end
+        flyRespConn = LocalPlayer.CharacterAdded:Connect(function()
+            task.wait(0.2)
+            if flyEnabled then startFly() end
+        end)
+    end
 
-local TabSettings = Window:Tab({
-    Title = "Settings",
-    Icon  = "settings",
-})
+    SectionMovement:Toggle({
+        Title    = "Fly",
+        Value    = false,
+        Callback = function(state)
+            flyEnabled = state
+            if state then startFly() else stopFly() end
+        end,
+    })
 
--- Section: Contact (ขวา)
-local SectionInfo = TabSettings:Section({
-    Title = "Contact",
-    Desc  = "Roblox Script Executor",
-    Side  = "right",
-})
+    SectionMovement:Slider({
+        Title    = "Fly Speed",
+        Value = {
+            Min = 5,
+            Max = 50,
+            Default = 10
+        },
+        Step = 1,
+        Callback = function(val) flySpeed = val end,
+    })
 
-SectionInfo:Paragraph({
-    Title   = "Chick Chick",
-    Color   = Color3.fromRGB(251, 196, 3),
-    Content = "Created By Ao Pro Free\nVersion: 2.0.0\nUI: WindUI by Footagesus",
-})
+    -- ── Super Jump ───────────────────────────────
+    local jumpEnabled = false
+    local jumpPower   = 50
+    local jumpConn, jumpRespConn
+    local origJumpPower = 50
+    local origUseJumpPower = true
 
-SectionInfo:Button({
-    Title   = "Discord",
-    Justify = "Between",
-    Desc    = "Join Discord",
-    Color   = Color3.fromRGB(88, 101, 242),
-    Icon    = "message-circle",
-    Callback = function()
-        local ok = copyToClipboard("https://discord.gg/CC4rfkErTe")
-        if ok then
-            WindUI:Notify({ Title = "Copied!", Content = "Discord link copied to clipboard", Duration = 4, Icon = "clipboard-check" })
-        else
-            WindUI:Notify({ Title = "Error",   Content = "Clipboard is not supported",      Duration = 4, Icon = "alert-circle" })
-        end
-    end,
-})
-
-SectionInfo:Button({
-    Title   = "Facebook",
-    Justify = "Between",
-    Desc    = "Contact Facebook",
-    Color   = Color3.fromRGB(24, 119, 242),
-    Icon    = "share-2",
-    Callback = function()
-        local ok = copyToClipboard("https://www.facebook.com/share/1EWj44utjm/")
-        if ok then
-            WindUI:Notify({ Title = "Copied!", Content = "Facebook link copied to clipboard", Duration = 4, Icon = "clipboard-check" })
-        else
-            WindUI:Notify({ Title = "Error",   Content = "Clipboard is not supported",        Duration = 4, Icon = "alert-circle" })
-        end
-    end,
-})
-
--- =============================================
--- Config File System
--- =============================================
-
-local CONFIG_ROOT   = "Config"
-local CONFIG_FOLDER = "Config/ChickChick"
-local HttpService   = game:GetService("HttpService")
-
-if not isfolder(CONFIG_ROOT)   then makefolder(CONFIG_ROOT) end
-if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
-
-local configNameInput = ""
-local selectedConfig  = nil
-local configDropdown  = nil
-local SavedFlags      = {}
-
-local function getConfigList()
-    local list = {}
-    local ok, files = pcall(listfiles, CONFIG_FOLDER)
-    if ok and files then
-        for _, fp in ipairs(files) do
-            local name = fp:match("([^/\\]+)%.json$")
-            if name then table.insert(list, name) end
+    local function applyJumpPower()
+        local hum = getHum()
+        if hum then
+            hum.UseJumpPower = true
+            hum.JumpPower = jumpPower
         end
     end
-    return list
-end
 
-local function refreshConfigDropdown()
-    if configDropdown then
-        local list = getConfigList()
-        configDropdown:Refresh(list, true)
-        selectedConfig = nil
+    local function startSuperJump()
+        local hum = getHum()
+        if hum then
+            origJumpPower = hum.JumpPower
+            origUseJumpPower = hum.UseJumpPower
+        end
+        if jumpConn then jumpConn:Disconnect() end
+        jumpConn = RunService.Heartbeat:Connect(function()
+            if jumpEnabled then applyJumpPower() end
+        end)
+        if jumpRespConn then jumpRespConn:Disconnect() end
+        jumpRespConn = LocalPlayer.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            if jumpEnabled then applyJumpPower() end
+        end)
     end
+
+    local function stopSuperJump()
+        if jumpConn     then jumpConn:Disconnect();     jumpConn     = nil end
+        if jumpRespConn then jumpRespConn:Disconnect(); jumpRespConn = nil end
+        local hum = getHum()
+        if hum then
+            hum.JumpPower = origJumpPower
+            hum.UseJumpPower = origUseJumpPower
+        end
+    end
+
+    SectionMovement:Toggle({
+        Title    = "Super Jump",
+        Value    = false,
+        Callback = function(state)
+            jumpEnabled = state
+            if state then startSuperJump() else stopSuperJump() end
+        end,
+    })
+
+    SectionMovement:Slider({
+        Title    = "Jump Power",
+        Value = {
+            Min = 10,
+            Max = 200,
+            Default = 50
+        },
+        Step = 1,
+        Callback = function(val)
+            jumpPower = val 
+            if jumpEnabled then applyJumpPower() end
+        end,
+    })
+
+    -- ── Infinity Jump ────────────────────────────
+    local infJumpEnabled = false
+    local infJumpConn, infJumpRespConn
+
+    if _G._gag2_infJumpConn then pcall(function() _G._gag2_infJumpConn:Disconnect() end) end
+    if _G._gag2_infJumpResp then pcall(function() _G._gag2_infJumpResp:Disconnect() end) end
+
+    local function startInfJump()
+        if infJumpConn then infJumpConn:Disconnect() end
+        infJumpConn = UIS.JumpRequest:Connect(function()
+            if not infJumpEnabled then return end
+            local hum = getHum()
+            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end)
+        _G._gag2_infJumpConn = infJumpConn
+
+        if infJumpRespConn then infJumpRespConn:Disconnect() end
+        infJumpRespConn = LocalPlayer.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            if infJumpEnabled then startInfJump() end
+        end)
+        _G._gag2_infJumpResp = infJumpRespConn
+    end
+
+    local function stopInfJump()
+        if infJumpConn     then infJumpConn:Disconnect();     infJumpConn     = nil end
+        if infJumpRespConn then infJumpRespConn:Disconnect(); infJumpRespConn = nil end
+        if _G._gag2_infJumpConn then pcall(function() _G._gag2_infJumpConn:Disconnect() end); _G._gag2_infJumpConn = nil end
+        if _G._gag2_infJumpResp then pcall(function() _G._gag2_infJumpResp:Disconnect() end); _G._gag2_infJumpResp = nil end
+    end
+
+    SectionMovement:Toggle({
+        Title    = "Infinity Jump",
+        Value    = false,
+        Callback = function(state)
+            infJumpEnabled = state
+            if state then startInfJump() else stopInfJump() end
+        end,
+    })
+
+    -- ── Noclip ───────────────────────────────────
+    local noclipEnabled = false
+    local noclipConn, noclipRespConn
+
+    local function applyNoclip()
+        local c = getChar()
+        if not c then return end
+        for _, part in ipairs(c:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+
+    local function startNoclip()
+        if noclipConn then noclipConn:Disconnect() end
+        noclipConn = RunService.Stepped:Connect(function()
+            if noclipEnabled then applyNoclip() end
+        end)
+        if noclipRespConn then noclipRespConn:Disconnect() end
+        noclipRespConn = LocalPlayer.CharacterAdded:Connect(function()
+            task.wait(0.1)
+            if noclipEnabled then startNoclip() end
+        end)
+    end
+
+    local function stopNoclip()
+        if noclipConn     then noclipConn:Disconnect();     noclipConn     = nil end
+        if noclipRespConn then noclipRespConn:Disconnect(); noclipRespConn = nil end
+    end
+
+    SectionMovement:Toggle({
+        Title    = "Noclip",
+        Value    = false,
+        Callback = function(state)
+            noclipEnabled = state
+            if state then startNoclip() else stopNoclip() end
+        end,
+    })
+
+    -- Section: Utility (ขวา)
+    local SectionUtility = TabMisc:Section({
+        Title = "Utility",
+        Side  = "right",
+    })
+
+    SectionUtility:Button({
+        Title       = "Copy Job ID",
+        Description = "Copy current server JobId",
+        Icon        = "clipboard",
+        Callback    = function()
+            local ok = copyToClipboard(game.JobId)
+            if ok then
+                WindUI:Notify({ Title = "Success", Content = "Job ID copied to clipboard", Duration = 3, Icon = "clipboard-check" })
+            else
+                WindUI:Notify({ Title = "Error",   Content = "Clipboard is not supported", Duration = 3, Icon = "alert-circle" })
+            end
+        end,
+    })
+
+    -- =============================================
+    -- แท็ป : Settings
+    -- =============================================
+
+    local TabSettings = self:Tab({
+        Title = "Settings",
+        Icon  = "settings",
+    })
+
+    -- Section: Contact
+    local SectionInfo = TabSettings:Section({
+        Title = "Contact",
+        Desc  = "Roblox Script Executor",
+        Side  = "right",
+    })
+
+    SectionInfo:Image({
+        Image = "rbxassetid://111710478480668",
+        AspectRatio = "16:9",
+        Radius = 12,
+    })
+
+    SectionInfo:Paragraph({
+        Title   = "Chick Chick",
+        Color   = Color3.fromRGB(251, 196, 3),
+        Content = "Created By Ao Pro Free\nVersion: 2.0.0\nUI: WindUI by Footagesus",
+    })
+
+    SectionInfo:Button({
+        Title   = "Discord",
+        Justify = "Between",
+        Desc    = "Join Discord",
+        Color   = Color3.fromRGB(88, 101, 242),
+        Icon    = "message-circle",
+        Callback = function()
+            local ok = copyToClipboard("https://discord.gg/CC4rfkErTe")
+            if ok then
+                WindUI:Notify({ Title = "Copied!", Content = "Discord link copied to clipboard", Duration = 4, Icon = "clipboard-check" })
+            else
+                WindUI:Notify({ Title = "Error",   Content = "Clipboard is not supported",      Duration = 4, Icon = "alert-circle" })
+            end
+        end,
+    })
+
+    SectionInfo:Button({
+        Title   = "Facebook",
+        Justify = "Between",
+        Desc    = "Contact Facebook",
+        Color   = Color3.fromRGB(24, 119, 242),
+        Icon    = "share-2",
+        Callback = function()
+            local ok = copyToClipboard("https://www.facebook.com/share/1EWj44utjm/")
+            if ok then
+                WindUI:Notify({ Title = "Copied!", Content = "Facebook link copied to clipboard", Duration = 4, Icon = "clipboard-check" })
+            else
+                WindUI:Notify({ Title = "Error",   Content = "Clipboard is not supported",        Duration = 4, Icon = "alert-circle" })
+            end
+        end,
+    })
+
+    -- Config File System
+    local CONFIG_ROOT   = "Config"
+    local CONFIG_FOLDER = "Config/ChickChick"
+
+    if not isfolder(CONFIG_ROOT)   then makefolder(CONFIG_ROOT) end
+    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+
+    local configNameInput = ""
+    local selectedConfig  = nil
+    local configDropdown  = nil
+    local SavedFlags      = {}
+
+    local function getConfigList()
+        local list = {}
+        local ok, files = pcall(listfiles, CONFIG_FOLDER)
+        if ok and files then
+            for _, fp in ipairs(files) do
+                local name = fp:match("([^/\\]+)%.json$")
+                if name then table.insert(list, name) end
+            end
+        end
+        return list
+    end
+
+    local function refreshConfigDropdown()
+        if configDropdown then
+            local list = getConfigList()
+            configDropdown:Refresh(list, true)
+            selectedConfig = nil
+        end
+    end
+
+    -- Section: Config
+    local SectionCfg = TabSettings:Section({
+        Title = "Config",
+        Desc  = "Config System",
+        Side  = "right",
+    })
+
+    SectionCfg:Input({
+        Title       = "Config Name",
+        Placeholder = "Enter Config Name",
+        Callback    = function(text) configNameInput = text end,
+    })
+
+    SectionCfg:Button({
+        Title    = "Create Config",
+        Color    = Color3.fromRGB(57, 255, 20),
+        Icon     = "plus-circle",
+        Callback = function()
+            local name = (configNameInput or ""):match("^%s*(.-)%s*$")
+            if name == "" then
+                WindUI:Notify({ Title = "Config", Content = "Please enter a config name", Duration = 3, Icon = "alert-circle" })
+                return
+            end
+            local path = CONFIG_FOLDER .. "/" .. name .. ".json"
+            if isfile(path) then
+                WindUI:Notify({ Title = "Config", Content = "Config already exists", Duration = 3, Icon = "alert-triangle" })
+                return
+            end
+            local ok, _ = pcall(writefile, path, HttpService:JSONEncode(SavedFlags))
+            if ok then
+                WindUI:Notify({ Title = "Config", Content = "Config created successfully", Duration = 3, Icon = "check-circle" })
+                refreshConfigDropdown()
+            else
+                WindUI:Notify({ Title = "Config", Content = "Failed to create config", Duration = 3, Icon = "alert-circle" })
+            end
+        end,
+    })
+
+    local initList = getConfigList()
+    configDropdown = SectionCfg:Dropdown({
+        Title    = "Select Config",
+        Values   = initList,
+        Default  = initList[1] or "",
+        Callback = function(value) selectedConfig = value end,
+    })
+
+    SectionCfg:Button({
+        Title    = "Save Config",
+        Color    = Color3.fromRGB(57, 255, 20),
+        Icon     = "save",
+        Callback = function()
+            if not selectedConfig or selectedConfig == "" then
+                WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
+                return
+            end
+            local ok, _ = pcall(writefile, CONFIG_FOLDER .. "/" .. selectedConfig .. ".json", HttpService:JSONEncode(SavedFlags))
+            if ok then
+                WindUI:Notify({ Title = "Config", Content = "Config saved successfully", Duration = 3, Icon = "check-circle" })
+            else
+                WindUI:Notify({ Title = "Config", Content = "Failed to save config", Duration = 3, Icon = "alert-circle" })
+            end
+        end,
+    })
+
+    SectionCfg:Button({
+        Title    = "Load Config",
+        Color    = Color3.fromRGB(24, 119, 242),
+        Icon     = "folder-open",
+        Callback = function()
+            if not selectedConfig or selectedConfig == "" then
+                WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
+                return
+            end
+            local path = CONFIG_FOLDER .. "/" .. selectedConfig .. ".json"
+            if not isfile(path) then
+                WindUI:Notify({ Title = "Config", Content = "Config file not found", Duration = 3, Icon = "alert-circle" })
+                return
+            end
+            local okR, raw = pcall(readfile, path)
+            if not okR then
+                WindUI:Notify({ Title = "Config", Content = "Failed to read config", Duration = 3, Icon = "alert-circle" })
+                return
+            end
+            local okD, data = pcall(HttpService.JSONDecode, HttpService, raw)
+            if not okD or type(data) ~= "table" then
+                WindUI:Notify({ Title = "Config", Content = "Invalid config format", Duration = 3, Icon = "alert-circle" })
+                return
+            end
+            for k, v in pairs(data) do SavedFlags[k] = v end
+            if data.Theme   then WindUI:SetTheme(data.Theme) end
+            if data.Acrylic ~= nil then WindUI:ToggleAcrylic(data.Acrylic) end
+            WindUI:Notify({ Title = "Config", Content = "Config loaded successfully", Duration = 3, Icon = "check-circle" })
+        end,
+    })
+
+    SectionCfg:Button({
+        Title    = "Delete Config",
+        Icon     = "trash-2",
+        Color    = Color3.fromRGB(220, 60, 60),
+        Callback = function()
+            if not selectedConfig or selectedConfig == "" then
+                WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
+                return
+            end
+            local path = CONFIG_FOLDER .. "/" .. selectedConfig .. ".json"
+            if not isfile(path) then
+                WindUI:Notify({ Title = "Config", Content = "Config file not found", Duration = 3, Icon = "alert-circle" })
+                return
+            end
+            local ok, _ = pcall(delfile, path)
+            if ok then
+                WindUI:Notify({ Title = "Config", Content = "Config deleted successfully", Duration = 3, Icon = "check-circle" })
+                refreshConfigDropdown()
+            else
+                WindUI:Notify({ Title = "Config", Content = "Failed to delete config", Duration = 3, Icon = "alert-circle" })
+            end
+        end,
+    })
+
+    -- Section: Ui Setting
+    local SectionConfig = TabSettings:Section({
+        Title = "Ui setting",
+        Side  = "left",
+    })
+
+    SectionConfig:Dropdown({
+        Title       = "Theme",
+        Description = "เลือก Theme ของ UI",
+        Values      = {"Dark", "Light", "Midnight", "Amber", "Aqua"},
+        Default     = "Amber",
+        Callback    = function(Value) WindUI:SetTheme(Value) end,
+    })
+
+    SectionConfig:Toggle({
+        Title       = "Acrylic Background",
+        Description = "เปิดใช้ Acrylic Blur",
+        Value       = false,
+        Callback    = function(State) WindUI:ToggleAcrylic(State) end,
+    })
+
+    SectionConfig:Keybind({
+        Title           = "Toggle UI",
+        Description     = "ปุ่มกด เปิด/ปิด UI",
+        Default         = Enum.KeyCode.RightControl,
+        Callback        = function()
+            if self.Instance then
+                self.Instance.Enabled = not self.Instance.Enabled
+            else
+                pcall(function() self:Toggle() end)
+            end
+        end,
+        ChangedCallback = function(key) end,
+    })
+
+    WindUI:Notify({
+        Title   = "Chick Chick Hub",
+        Content = "โหลดสำเร็จ! ยินดีต้อนรับ",
+        Duration = 5,
+        Icon    = "rbxassetid://111710478480668",
+    })
+
+    -- =============================================
+    -- Mobile Toggle Button
+    -- =============================================
+    local CoreGui = game:GetService("CoreGui")
+    
+    -- ลบอันเก่าถ้ามี (ป้องกันปุ่มทับซ้อนเวลารันใหม่)
+    for _, child in ipairs(CoreGui:GetChildren()) do
+        if child.Name == "ChickChickToggle" then
+            child:Destroy()
+        end
+    end
+    if gethui then
+        for _, child in ipairs(gethui():GetChildren()) do
+            if child.Name == "ChickChickToggle" then
+                child:Destroy()
+            end
+        end
+    end
+
+    local toggleGui = Instance.new("ScreenGui")
+    toggleGui.Name = "ChickChickToggle"
+    toggleGui.ResetOnSpawn = false
+
+    if gethui then
+        toggleGui.Parent = gethui()
+    elseif syn and syn.protect_gui then
+        syn.protect_gui(toggleGui)
+        toggleGui.Parent = CoreGui
+    else
+        local ok = pcall(function() toggleGui.Parent = CoreGui end)
+        if not ok then
+            toggleGui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+        end
+    end
+
+    local toggleBtn = Instance.new("ImageButton")
+    toggleBtn.Name = "ToggleButton"
+    toggleBtn.Parent = toggleGui
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    toggleBtn.BackgroundTransparency = 0.3
+    toggleBtn.Position = UDim2.new(0, 20, 0, 20)
+    toggleBtn.Size = UDim2.new(0, 50, 0, 50)
+    toggleBtn.Image = "rbxassetid://111710478480668"
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = toggleBtn
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Transparency = 0.5
+    stroke.Thickness = 1.5
+    stroke.Parent = toggleBtn
+
+    -- Dragging Logic
+    local dragging
+    local dragInput
+    local dragStart
+    local startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        toggleBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+
+    toggleBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = toggleBtn.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    toggleBtn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+
+    -- Click Logic
+    local clickStart = 0
+    toggleBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            clickStart = tick()
+        end
+    end)
+
+    toggleBtn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if tick() - clickStart < 0.3 then -- If released quickly, count as click
+                if self.Instance then
+                    self.Instance.Enabled = not self.Instance.Enabled
+                else
+                    pcall(function() self:Toggle() end)
+                end
+            end
+        end
+    end)
+
 end
 
--- Section: Config (ขวา)
-local SectionCfg = TabSettings:Section({
-    Title = "Config",
-    Desc  = "Config System",
-    Side  = "right",
-})
-
-SectionCfg:Input({
-    Title       = "Config Name",
-    Placeholder = "Enter Config Name",
-    Callback    = function(text) configNameInput = text end,
-})
-
-SectionCfg:Button({
-    Title    = "Create Config",
-    Color    = Color3.fromRGB(57, 255, 20),
-    Icon     = "plus-circle",
-    Callback = function()
-        local name = (configNameInput or ""):match("^%s*(.-)%s*$")
-        if name == "" then
-            WindUI:Notify({ Title = "Config", Content = "Please enter a config name", Duration = 3, Icon = "alert-circle" })
-            return
-        end
-        local path = CONFIG_FOLDER .. "/" .. name .. ".json"
-        if isfile(path) then
-            WindUI:Notify({ Title = "Config", Content = "Config already exists", Duration = 3, Icon = "alert-triangle" })
-            return
-        end
-        local ok, _ = pcall(writefile, path, HttpService:JSONEncode(SavedFlags))
-        if ok then
-            WindUI:Notify({ Title = "Config", Content = "Config created successfully", Duration = 3, Icon = "check-circle" })
-            refreshConfigDropdown()
-        else
-            WindUI:Notify({ Title = "Config", Content = "Failed to create config", Duration = 3, Icon = "alert-circle" })
-        end
-    end,
-})
-
-local initList = getConfigList()
-configDropdown = SectionCfg:Dropdown({
-    Title    = "Select Config",
-    Values   = initList,
-    Default  = initList[1] or "",
-    Callback = function(value) selectedConfig = value end,
-})
-
-SectionCfg:Button({
-    Title    = "Save Config",
-    Color    = Color3.fromRGB(57, 255, 20),
-    Icon     = "save",
-    Callback = function()
-        if not selectedConfig or selectedConfig == "" then
-            WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
-            return
-        end
-        local ok, _ = pcall(writefile, CONFIG_FOLDER .. "/" .. selectedConfig .. ".json", HttpService:JSONEncode(SavedFlags))
-        if ok then
-            WindUI:Notify({ Title = "Config", Content = "Config saved successfully", Duration = 3, Icon = "check-circle" })
-        else
-            WindUI:Notify({ Title = "Config", Content = "Failed to save config", Duration = 3, Icon = "alert-circle" })
-        end
-    end,
-})
-
-SectionCfg:Button({
-    Title    = "Load Config",
-    Color    = Color3.fromRGB(24, 119, 242),
-    Icon     = "folder-open",
-    Callback = function()
-        if not selectedConfig or selectedConfig == "" then
-            WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
-            return
-        end
-        local path = CONFIG_FOLDER .. "/" .. selectedConfig .. ".json"
-        if not isfile(path) then
-            WindUI:Notify({ Title = "Config", Content = "Config file not found", Duration = 3, Icon = "alert-circle" })
-            return
-        end
-        local okR, raw = pcall(readfile, path)
-        if not okR then
-            WindUI:Notify({ Title = "Config", Content = "Failed to read config", Duration = 3, Icon = "alert-circle" })
-            return
-        end
-        local okD, data = pcall(HttpService.JSONDecode, HttpService, raw)
-        if not okD or type(data) ~= "table" then
-            WindUI:Notify({ Title = "Config", Content = "Invalid config format", Duration = 3, Icon = "alert-circle" })
-            return
-        end
-        for k, v in pairs(data) do SavedFlags[k] = v end
-        if data.Theme   then WindUI:SetTheme(data.Theme) end
-        if data.Acrylic ~= nil then WindUI:ToggleAcrylic(data.Acrylic) end
-        WindUI:Notify({ Title = "Config", Content = "Config loaded successfully", Duration = 3, Icon = "check-circle" })
-    end,
-})
-
-SectionCfg:Button({
-    Title    = "Delete Config",
-    Icon     = "trash-2",
-    Color    = Color3.fromRGB(220, 60, 60),
-    Callback = function()
-        if not selectedConfig or selectedConfig == "" then
-            WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
-            return
-        end
-        local path = CONFIG_FOLDER .. "/" .. selectedConfig .. ".json"
-        if not isfile(path) then
-            WindUI:Notify({ Title = "Config", Content = "Config file not found", Duration = 3, Icon = "alert-circle" })
-            return
-        end
-        local ok, _ = pcall(delfile, path)
-        if ok then
-            WindUI:Notify({ Title = "Config", Content = "Config deleted successfully", Duration = 3, Icon = "check-circle" })
-            refreshConfigDropdown()
-        else
-            WindUI:Notify({ Title = "Config", Content = "Failed to delete config", Duration = 3, Icon = "alert-circle" })
-        end
-    end,
-})
-
--- Section: Ui Setting (ซ้าย)
-local SectionConfig = TabSettings:Section({
-    Title = "Ui setting",
-    Side  = "left",
-})
-
-SectionConfig:Dropdown({
-    Title       = "Theme",
-    Description = "เลือก Theme ของ UI",
-    Values      = {"Dark", "Light", "Midnight", "Aqua"},
-    Default     = "Aqua",
-    Callback    = function(Value) WindUI:SetTheme(Value) end,
-})
-
-SectionConfig:Toggle({
-    Title       = "Acrylic Background",
-    Description = "เปิดใช้ Acrylic Blur",
-    Value       = false,
-    Callback    = function(State) WindUI:ToggleAcrylic(State) end,
-})
-
-SectionConfig:Keybind({
-    Title           = "Toggle UI",
-    Description     = "ปุ่มกด เปิด/ปิด UI",
-    Default         = Enum.KeyCode.RightControl,
-    Callback        = function()
-        -- Some WindUI versions don't have Window:Toggle(), need to toggle Enabled manually
-        if Window.Instance then
-            Window.Instance.Enabled = not Window.Instance.Enabled
-        else
-            -- Try native toggle if available
-            pcall(function() Window:Toggle() end)
-        end
-    end,
-    ChangedCallback = function(key) end,
-})
-
 -- =============================================
--- Notification แจ้งเตือนตอนโหลด
+-- Return โมดูล
 -- =============================================
 
-WindUI:Notify({
-    Title   = "Chick Chick Hub",
-    Content = "โหลดสำเร็จ! ยินดีต้อนรับ",
-    Duration = 5,
-    Icon    = "rbxassetid://127819735797183",
-})
+return Window
