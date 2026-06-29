@@ -1,4 +1,4 @@
-repeat task.wait() until game:IsLoaded()
+repeat wait() until game:IsLoaded()
 
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
@@ -184,84 +184,66 @@ local HarvestToggle = HarvestSection:Toggle({
             local updateCounter = 0
             updateSelections()
 
-            -- เริ่มการทำ Auto Harvest (เวอร์ชั่น Optimize ขั้นสุด ไม่แลค + เก็บไวมาก)
-            AutoHarvestTask = task.spawn(function()
-                -- สร้าง Cache แบบ Weak Table เพื่อจำค่า Prompt (ถ้าต้นไม้โดนลบ cache จะหายไปเองอัตโนมัติ ไม่กินเมม)
-                local promptCache = setmetatable({}, {__mode = "k"})
-                
-                while AutoHarvestEnabled do
-                    -- ลดดีเลย์เหลือแค่ 0.05 (20 ครั้งต่อวิ) ทำให้เก็บเกี่ยวไวมาก โดยไม่ทำเครื่องแลคเพราะมี Cache แล้ว
-                    task.wait(0.05)
-                    
-                    updateSelections()
+            -- เริ่มการทำ Auto Harvest (TURBO MAX VERSION - Heartbeat + Parallel Processing)
+            local myPlotId = lp:GetAttribute("PlotId")
+            local plotName = "Plot" .. tostring(myPlotId)
 
-                    pcall(function()
-                        local myPlotId = lp:GetAttribute("PlotId")
-                        if not myPlotId or not gardens then return end
+            AutoHarvestTask = RunService.Heartbeat:Connect(function()
+                if not AutoHarvestEnabled then return end
 
-                        local plot = gardens:FindFirstChild("Plot" .. tostring(myPlotId))
-                        if not plot then return end
+                pcall(function()
+                    if not myPlotId or not gardens then return end
 
-                        local plants = plot:FindFirstChild("Plants")
-                        if not plants then return end
+                    local plot = gardens:FindFirstChild(plotName)
+                    if not plot then return end
 
-                        -- วนลูปหาต้นไม้ในแปลงของผู้เล่น
-                        for _, plant in ipairs(plants:GetChildren()) do
-                            local prompt = promptCache[plant]
-                            
-                            -- ถ้ายังไม่มี Prompt ใน Cache หรือ Prompt เดิมพังไปแล้ว ให้ดึงหาใหม่แค่ครั้งเดียว!
-                            if not prompt or not prompt.Parent then
-                                prompt = plant:FindFirstChildWhichIsA("ProximityPrompt", true)
-                                if prompt then
-                                    promptCache[plant] = prompt
-                                end
-                            end
+                    local plants = plot:FindFirstChild("Plants")
+                    if not plants then return end
 
-                            -- ถ้าเจอจุดที่สามารถเกี่ยวได้
-                            if prompt and prompt.ActionText == "Harvest" and prompt.Enabled then
-                                
-                                -- ถ้าเลือกคำว่า All ทุกอย่าง ให้กดเก็บทันที
-                                if hasAllFruits and hasAllBuffs then
-                                    task.spawn(function()
+                    -- ใช้ GetChildren แทน ipairs (เร็วกว่า)
+                    local plantsList = plants:GetChildren()
+                    local totalPlants = #plantsList
+
+                    -- ประมวลผลแบบ Parallel - แบ่งเป็น batch ๆ ละ 15 ต้น
+                    local batchSize = 15
+                    for i = 1, totalPlants, batchSize do
+                        task.spawn(function()
+                            for j = i, math.min(i + batchSize - 1, totalPlants) do
+                                local plant = plantsList[j]
+
+                                -- หา Prompt โดยตรง (ไม่ใช้ Cache เพราะ FindFirstChildWhichIsA เร็วพอแล้ว)
+                                local prompt = plant:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+                                -- เช็คว่าเก็บได้หรือไม่
+                                if prompt and prompt.ActionText == "Harvest" and prompt.Enabled then
+
+                                    local shouldHarvest = false
+
+                                    -- Fast path: ถ้าเลือก All ทั้งหมด
+                                    if hasAllFruits and hasAllBuffs then
+                                        shouldHarvest = true
+                                    else
+                                        -- Slow path: เช็คเงื่อนไข
+                                        local seedMatch = hasAllFruits or targetFruits[plant:GetAttribute("SeedName")]
+                                        local mutationMatch = hasAllBuffs or targetBuffs[plant:GetAttribute("Mutation") or "Normal"]
+                                        shouldHarvest = seedMatch and mutationMatch
+                                    end
+
+                                    -- เก็บเกี่ยวแบบ Fire-and-Forget (ไม่รอ ไม่ spawn)
+                                    if shouldHarvest then
                                         prompt.HoldDuration = 0
                                         fireproximityprompt(prompt)
-                                    end)
-                                else
-                                    local canHarvest = true
-
-                                    -- ตรวจสอบชื่อผลไม้
-                                    if not hasAllFruits then
-                                        local seedName = plant:GetAttribute("SeedName")
-                                        if not seedName or not targetFruits[seedName] then
-                                            canHarvest = false
-                                        end
-                                    end
-
-                                    -- ตรวจสอบ Mutation (บัฟ)
-                                    if canHarvest and not hasAllBuffs then
-                                        local mutation = plant:GetAttribute("Mutation") or "Normal"
-                                        if not targetBuffs[mutation] then
-                                            canHarvest = false
-                                        end
-                                    end
-
-                                    -- ถ้าผ่านเงื่อนไขให้ทำการ Harvest ทันที
-                                    if canHarvest then
-                                        task.spawn(function()
-                                            prompt.HoldDuration = 0
-                                            fireproximityprompt(prompt)
-                                        end)
                                     end
                                 end
                             end
-                        end
-                    end)
-                end
+                        end)
+                    end
+                end)
             end)
         else
             -- ปิดลูปเมื่อ Toggle ปิด
             if AutoHarvestTask then
-                task.cancel(AutoHarvestTask)
+                AutoHarvestTask:Disconnect()
                 AutoHarvestTask = nil
             end
         end
@@ -1192,50 +1174,14 @@ local SellFruitDropdown = AutoSellSection:Dropdown({
     end
 })
 
-local SellKeepAmount = 10
-local SellKeepSlider = AutoSellSection:Slider({
-    Title = "Amount to Keep",
-    Desc = "Sell excess fruits until you have this many left",
-    Value = {
-        Min = 0,
-        Max = 100,
-        Default = 10
-    },
-    Step = 1,
-    Callback = function(v)
-        SellKeepAmount = v
-    end
-})
-
 local AutoSellEnabled = false
 local AutoSellTask = nil
 
 local function DoAutoSell()
     pcall(function()
-        local lp = game.Players.LocalPlayer
-        local bp = lp:FindFirstChild("Backpack")
-        if not bp then return end
-        
         local Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
-        
-        -- นับจำนวนผลไม้และดึง ID ออกมา
-        local fruitCounts = {}
-        local fruitTools = {}
-        
-        for _, t in ipairs(bp:GetChildren()) do
-            local fruitName = t:GetAttribute("Fruit") or t:GetAttribute("FruitName")
-            local fruitId = t:GetAttribute("Id")
-            if fruitName and fruitId then
-                if not fruitCounts[fruitName] then
-                    fruitCounts[fruitName] = 0
-                    fruitTools[fruitName] = {}
-                end
-                fruitCounts[fruitName] = fruitCounts[fruitName] + 1
-                table.insert(fruitTools[fruitName], fruitId)
-            end
-        end
-        
-        local fruitList = {"Apple", "Blueberry", "Strawberry", "Tomato", "Pineapple", "Pumpkin", "Watermelon", "Potato", "Carrot", "Onion", "Corn", "Wheat", "Radish", "Turnip", "Cabbage", "Lettuce", "Pepper", "Eggplant", "Mushroom", "Banana", "Grape", "Bamboo"}
+
+        -- ตรวจสอบว่าเลือก "All" หรือไม่
         local isAll = false
         for k, v in pairs(SelectedSellFruits) do
             local fn = type(k) == "number" and v or k
@@ -1243,30 +1189,10 @@ local function DoAutoSell()
                 isAll = true break
             end
         end
-        
-        local targetFruits = {}
-        if isAll then
-            for _, v in ipairs(fruitList) do targetFruits[v] = true end
-        else
-            for k, v in pairs(SelectedSellFruits) do
-                local fn = type(k) == "number" and v or k
-                if (v == true or type(k) == "number") and fn ~= "All" then targetFruits[fn] = true end
-            end
-        end
-        
-        -- ตรวจสอบและขายส่วนเกิน
-        for targetFruit, _ in pairs(targetFruits) do
-            if fruitCounts[targetFruit] and fruitCounts[targetFruit] > SellKeepAmount then
-                local excess = fruitCounts[targetFruit] - SellKeepAmount
-                local toolsList = fruitTools[targetFruit]
-                
-                for i = 1, excess do
-                    if toolsList[i] then
-                        Networking.NPCS.SellFruit:Fire(toolsList[i])
-                        task.wait(0.1) -- เว้นระยะเพื่อกันแลคและกันเซิร์ฟเวอร์เตะ
-                    end
-                end
-            end
+
+        -- ถ้าเลือก All หรือเลือกผลไม้อะไรก็ตาม ให้ขายทั้งหมดเลย
+        if isAll or (type(SelectedSellFruits) == "table" and #SelectedSellFruits > 0) then
+            Networking.NPCS.SellAll:Fire()
         end
     end)
 end
@@ -1343,7 +1269,7 @@ local AutoBuyAuctionSection = ShopTab:Section({
 local SelectedAuctionItems = {"All"}
 local AuctionDropdown = AutoBuyAuctionSection:Dropdown({
     Title = "Select Items to Buy",
-    Desc = "Items will update every 5 seconds based on current auction.",
+    Desc = "Items will update automatically based on current auction.",
     Values = {"All"},
     Value = {"All"},
     Multi = true,
@@ -1359,52 +1285,78 @@ local AuctionUpdateTask = nil
 
 local LastAuctionItems = {}
 
--- Task to update Dropdown items every 5 seconds
-AuctionUpdateTask = task.spawn(function()
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local StockValues = ReplicatedStorage:WaitForChild("StockValues", 10)
-    
-    while task.wait(5) do
-        pcall(function()
-            if StockValues then
-                local currentItems = {"All"}
-                local foundItems = {}
-                
-                for _, shopFolder in ipairs(StockValues:GetChildren()) do
-                    local itemsFolder = shopFolder:FindFirstChild("Items")
-                    if itemsFolder then
-                        for _, itemValue in ipairs(itemsFolder:GetChildren()) do
-                            local name = itemValue.Name
-                            if not foundItems[name] then
-                                foundItems[name] = true
-                                table.insert(currentItems, name)
+-- ฟังก์ชันอัปเดต Dropdown (แยกออกมาเพื่อให้ปุ่ม Refresh เรียกใช้ได้)
+local function UpdateAuctionDropdown()
+    pcall(function()
+        local lp = game.Players.LocalPlayer
+        local pg = lp:FindFirstChild("PlayerGui")
+        if not pg then return end
+
+        local currentItems = {"All"}
+        local foundItems = {}
+
+        -- ดึงข้อมูลจาก Auction GUI โดยตรง
+        local auctionGui = pg:FindFirstChild("Auction")
+        if auctionGui then
+            local scrollingFrame = auctionGui:FindFirstChild("Frame")
+                and auctionGui.Frame:FindFirstChild("ScrollingFrame")
+
+            if scrollingFrame then
+                for _, lot in ipairs(scrollingFrame:GetChildren()) do
+                    if string.find(lot.Name, "Lot_auction") then
+                        local itemNameLabel = lot:FindFirstChild("ItemName", true)
+
+                        if itemNameLabel and itemNameLabel.Text then
+                            local itemName = itemNameLabel.Text
+
+                            -- เพิ่มเฉพาะไอเทมที่ยังไม่ซ้ำ
+                            if not foundItems[itemName] then
+                                foundItems[itemName] = true
+                                table.insert(currentItems, itemName)
                             end
                         end
                     end
                 end
-                
-                -- ตรวจสอบว่ารายการไอเทมมีการเปลี่ยนแปลงหรือไม่ก่อนที่จะ Refresh UI
-                local isDifferent = false
-                if #currentItems ~= #LastAuctionItems then
+            end
+        end
+
+        -- ตรวจสอบว่ารายการมีการเปลี่ยนแปลงหรือไม่
+        local isDifferent = false
+        if #currentItems ~= #LastAuctionItems then
+            isDifferent = true
+        else
+            for i, v in ipairs(currentItems) do
+                if v ~= LastAuctionItems[i] then
                     isDifferent = true
-                else
-                    for i, v in ipairs(currentItems) do
-                        if v ~= LastAuctionItems[i] then
-                            isDifferent = true
-                            break
-                        end
-                    end
-                end
-                
-                if isDifferent then
-                    LastAuctionItems = currentItems
-                    if #currentItems > 1 then
-                        -- อัปเดต Dropdown เฉพาะตอนที่มีการเปลี่ยนแปลงจริงๆ เพื่อลดอาการกระตุก (FPS ตก)
-                        AuctionDropdown:Refresh(currentItems, true)
-                    end
+                    break
                 end
             end
-        end)
+        end
+
+        -- อัปเดต Dropdown ถ้ามีการเปลี่ยนแปลง
+        if isDifferent then
+            LastAuctionItems = currentItems
+            if #currentItems > 1 then
+                AuctionDropdown:Refresh(currentItems, true)
+            end
+        end
+    end)
+end
+
+-- ปุ่ม Refresh สำหรับอัปเดท Dropdown ทันที
+local RefreshAuctionButton = AutoBuyAuctionSection:Button({
+    Title = "Refresh Auction Items",
+    Color = Color3.fromRGB(251, 196, 3),
+    Desc = "Manually update the dropdown with current auction items",
+    Callback = function()
+        UpdateAuctionDropdown()
+    end
+})
+
+-- Task to update Dropdown items automatically from Auction GUI
+AuctionUpdateTask = task.spawn(function()
+    while task.wait(600) do -- อัปเดททุก 10 นาที (600 วินาที)
+        UpdateAuctionDropdown()
     end
 end)
 
@@ -1578,35 +1530,35 @@ local function DoAutoMail()
                 TargetUserIdCache[targetName] = r
             end
         end
-        
+
         if targetUserId then
             local Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
             local PlayerStateClient = require(game:GetService("ReplicatedStorage").ClientModules.PlayerStateClient)
             local inventory = PlayerStateClient.GetLocalReplica().Data.Inventory
-            local itemsToSend = {}
-            local sentTracker = {}
-            
+            local lp = game.Players.LocalPlayer
+
+            -- สร้าง dictionary สำหรับเช็คว่าเลือกอะไรบ้าง
             local isAllSeeds = false
             local seedsDict = {}
             for _, v in ipairs(SelectedMailSeeds) do
                 if v == "All" then isAllSeeds = true end
                 seedsDict[v] = true
             end
-            
+
             local isAllGears = false
             local gearsDict = {}
             for _, v in ipairs(SelectedMailGears) do
                 if v == "All" then isAllGears = true end
                 gearsDict[v] = true
             end
-            
+
             local isAllPets = false
             local petsDict = {}
             for _, v in ipairs(SelectedMailPets) do
                 if v == "All" then isAllPets = true end
                 petsDict[v] = true
             end
-            
+
             local isAllFruits = false
             local fruitsDict = {}
             for _, v in ipairs(SelectedMailFruits) do
@@ -1614,11 +1566,18 @@ local function DoAutoMail()
                 fruitsDict[v] = true
             end
 
+            -- ตัวนับจำนวนที่ส่งไปแล้วของแต่ละชนิด
+            local sentTracker = {}
+
+            -- เก็บรายการสิ่งของที่จะส่งทั้งหมด
+            local itemsToSend = {}
+
+            -- 1. ส่งจาก Inventory (Seeds, Gears, Pets)
             for category, categoryItems in pairs(inventory) do
-                if category ~= "HarvestedFruits" then
+                if category ~= "HarvestedFruits" and type(categoryItems) == "table" then
                     for itemKey, itemData in pairs(categoryItems) do
                         local count = type(itemData) == "number" and itemData or (type(itemData) == "table" and 1 or 0)
-                        
+
                         if count > 0 then
                             local shouldSend = false
                             if category == "Seeds" then
@@ -1628,7 +1587,7 @@ local function DoAutoMail()
                             else
                                 if isAllGears or gearsDict[itemKey] then shouldSend = true end
                             end
-                            
+
                             if shouldSend then
                                 local finalCount = count
                                 if MailSendAmount > 0 then
@@ -1640,7 +1599,7 @@ local function DoAutoMail()
                                         sentTracker[itemKey] = sent + finalCount
                                     end
                                 end
-                                
+
                                 if shouldSend and finalCount > 0 then
                                     table.insert(itemsToSend, {
                                         Category = category,
@@ -1653,51 +1612,93 @@ local function DoAutoMail()
                     end
                 end
             end
-            
-            -- HarvestedFruits logic (tools in backpack/character)
-            local lp = game.Players.LocalPlayer
-            for _, folder in ipairs({lp:FindFirstChild("Backpack"), lp.Character}) do
-                if folder then
-                    for _, tool in ipairs(folder:GetChildren()) do
-                        if tool:IsA("Tool") then
-                            local fname = tool:GetAttribute("FruitName")
-                            if fname and (isAllFruits or fruitsDict[fname]) then
-                                local shouldSend = true
-                                if MailSendAmount > 0 then
-                                    local sent = sentTracker[fname] or 0
-                                    if sent >= MailSendAmount then
-                                        shouldSend = false
-                                    else
-                                        sentTracker[fname] = sent + 1
-                                    end
-                                end
-                                if shouldSend then
-                                    local fruitId = tool:GetAttribute("Id") or fname
-                                    table.insert(itemsToSend, {
-                                        Category = "HarvestedFruits",
-                                        ItemKey = fruitId,
-                                        Count = 1
-                                    })
-                                end
+
+            -- 2. ส่งผลไม้จากกระเป๋า/ตัวละคร (HarvestedFruits)
+            -- เก็บรายการผลไม้ทั้งหมดจากทุกที่ก่อน
+            local fruitToolsList = {}
+
+            -- 2.1 เช็คจาก Backpack
+            local backpack = lp:FindFirstChild("Backpack")
+            if backpack then
+                for _, tool in ipairs(backpack:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        -- ลองหา Attribute หลายแบบ
+                        local fname = tool:GetAttribute("FruitName") or tool:GetAttribute("Fruit") or tool.Name
+                        local fruitId = tool:GetAttribute("Id") or tool:GetAttribute("FruitId")
+
+                        -- ตรวจสอบว่าเป็นผลไม้จริงๆ (มี Id และชื่ออยู่ใน SeedsList หรือเลือก All)
+                        if fruitId and fname and (isAllFruits or fruitsDict[fname]) then
+                            if not fruitToolsList[fname] then
+                                fruitToolsList[fname] = {}
                             end
+                            table.insert(fruitToolsList[fname], fruitId)
                         end
                     end
                 end
             end
-            
+
+            -- 2.2 เช็คจาก Character (ที่อยู่ในมือ)
+            if lp.Character then
+                for _, tool in ipairs(lp.Character:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        local fname = tool:GetAttribute("FruitName") or tool:GetAttribute("Fruit") or tool.Name
+                        local fruitId = tool:GetAttribute("Id") or tool:GetAttribute("FruitId")
+
+                        if fruitId and fname and (isAllFruits or fruitsDict[fname]) then
+                            if not fruitToolsList[fname] then
+                                fruitToolsList[fname] = {}
+                            end
+                            table.insert(fruitToolsList[fname], fruitId)
+                        end
+                    end
+                end
+            end
+
+            -- 2.3 เพิ่มผลไม้ลงในรายการส่ง โดยคำนึงถึง MailSendAmount
+            for fruitName, fruitIds in pairs(fruitToolsList) do
+                local totalAvailable = #fruitIds
+                local amountToSend = totalAvailable
+
+                -- ถ้ากำหนดจำนวนส่ง ให้ส่งแค่ที่กำหนด
+                if MailSendAmount > 0 then
+                    local alreadySent = sentTracker[fruitName] or 0
+                    if alreadySent >= MailSendAmount then
+                        amountToSend = 0 -- ส่งครบแล้ว
+                    else
+                        amountToSend = math.min(totalAvailable, MailSendAmount - alreadySent)
+                        sentTracker[fruitName] = alreadySent + amountToSend
+                    end
+                end
+
+                -- ส่งผลไม้ทีละชิ้น
+                for i = 1, amountToSend do
+                    table.insert(itemsToSend, {
+                        Category = "HarvestedFruits",
+                        ItemKey = fruitIds[i],
+                        Count = 1
+                    })
+                end
+            end
+
+            -- 3. ส่ง Mail ในชุดละ 100 ชิ้น
             if #itemsToSend > 0 then
                 local batch = {}
                 for _, item in ipairs(itemsToSend) do
                     table.insert(batch, item)
-                    if #batch >= 5 then
-                        Networking.Mailbox.SendBatch:Fire(targetUserId, batch, "Gift")
-                        task.wait(1.5)
+                    if #batch >= 100 then
+                        pcall(function()
+                            Networking.Mailbox.SendBatch:Fire(targetUserId, batch, "Gift")
+                        end)
+                        task.wait(2)
                         batch = {}
                     end
                 end
+                -- ส่งส่วนที่เหลือ
                 if #batch > 0 then
-                    Networking.Mailbox.SendBatch:Fire(targetUserId, batch, "Gift")
-                    task.wait(1.5)
+                    pcall(function()
+                        Networking.Mailbox.SendBatch:Fire(targetUserId, batch, "Gift")
+                    end)
+                    task.wait(2)
                 end
             end
         end
