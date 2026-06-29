@@ -75,6 +75,35 @@ pcall(function()
     end
 end)
 
+local PetRaritiesList = {"All"}
+local PetSizesList = {"All"}
+
+pcall(function()
+    local PetData = require(ReplicatedStorage:WaitForChild("SharedData"):WaitForChild("PetData"))
+    local found = {}
+    for _, v in pairs(PetData) do
+        if type(v) == "table" and v.Rarity and not found[v.Rarity] then
+            found[v.Rarity] = true
+            table.insert(PetRaritiesList, v.Rarity)
+        end
+    end
+end)
+
+pcall(function()
+    local PetSizes = require(ReplicatedStorage:WaitForChild("SharedData"):WaitForChild("PetSizes"))
+    for k, _ in pairs(PetSizes) do
+        if type(k) == "string" then
+            table.insert(PetSizesList, k)
+        end
+    end
+end)
+
+-- อัปเดต Mutations ใหม่ล่าสุดที่เจอจากการเจาะข้อมูลตัวเกม
+local MutationList = {
+    "All", "Normal", "Gold", "Rainbow", "Giant", "Huge", "Shiny",
+    "Electric", "Aurora", "Bloodlit", "Starstruck", "Frozen"
+}
+
 for i = 2, #SeedsList do table.insert(AllItemsList, SeedsList[i]) end
 for i = 2, #GearsList do table.insert(AllItemsList, GearsList[i]) end
 for i = 2, #PetsList do table.insert(AllItemsList, PetsList[i]) end
@@ -93,21 +122,21 @@ local HarvestSection = MainTab:Section({
     Icon = "leaf",
 })
 
--- อัปเดต Mutations ใหม่ล่าสุดที่เจอจากการเจาะข้อมูลตัวเกม
-local MutationList = {
-    "All", "Normal", "Gold", "Rainbow", "Giant", "Huge", "Shiny",
-    "Electric", "Aurora", "Bloodlit", "Starstruck", "Frozen"
-}
+-- (MutationList was moved to the top for global access)
 
 -- ตัวแปรเก็บค่าปัจจุบันที่เลือก
 local SelectedFruits = {"All"}
+local SelectedRarities = {"All"}
 local SelectedBuffs = {"All"}
+local HarvestThresholdMode = "Harvest All"
+local HarvestWeightThreshold = 0
+
 local AutoHarvestEnabled = false
 local AutoHarvestTask = nil
 
 -- UI Components
 local FruitDropdown = HarvestSection:Dropdown({
-    Title = "Select Fruits to Harvest",
+    Title = "Select Fruit",
     Desc = "Select fruits to target",
     Values = SeedsList,
     Value = {"All"},
@@ -117,11 +146,23 @@ local FruitDropdown = HarvestSection:Dropdown({
         SelectedFruits = selected
     end
 })
-_G.FruitDropdown = FruitDropdown -- เก็บไว้เพื่อใช้อัพเดทค่าจาก MCP
+_G.FruitDropdown = FruitDropdown
 
-local BuffDropdown = HarvestSection:Dropdown({
-    Title = "Select Fruit Buffs/Mutations to Harvest",
-    Desc = "Select fruit buffs",
+local RarityDropdown = HarvestSection:Dropdown({
+    Title = "Select Rarity",
+    Desc = "Select fruit rarity (if applicable)",
+    Values = {"All", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythical"},
+    Value = {"All"},
+    Multi = true,
+    Flag = "selected_rarities",
+    Callback = function(selected)
+        SelectedRarities = selected
+    end
+})
+
+local MutationDropdown = HarvestSection:Dropdown({
+    Title = "Select Mutation",
+    Desc = "Select fruit mutations",
     Values = MutationList,
     Value = {"All"},
     Multi = true,
@@ -130,7 +171,34 @@ local BuffDropdown = HarvestSection:Dropdown({
         SelectedBuffs = selected
     end
 })
-_G.BuffDropdown = BuffDropdown -- เก็บไว้เพื่อใช้อัพเดทค่าจาก MCP
+_G.BuffDropdown = MutationDropdown
+
+local ThresholdModeDropdown = HarvestSection:Dropdown({
+    Title = "Select Threshold Mode",
+    Desc = "Choose how to filter harvest by weight",
+    Values = {"Harvest All", "Harvest < Weight", "Harvest > Weight"},
+    Value = "Harvest All",
+    Multi = false,
+    Flag = "harvest_threshold_mode",
+    Callback = function(val)
+        HarvestThresholdMode = val
+    end
+})
+
+local WeightThresholdInput = HarvestSection:Input({
+    Title = "Weight Threshold (kg)",
+    Desc = "Enter the weight threshold number",
+    Placeholder = "e.g. 50",
+    Numeric = true,
+    Finished = false,
+    Flag = "harvest_weight_threshold",
+    Callback = function(val)
+        local num = tonumber(val)
+        if num then
+            HarvestWeightThreshold = num
+        end
+    end
+})
 
 local HarvestToggle = HarvestSection:Toggle({
     Title = "Auto Harvest (ULTRA SPEED ⚡)",
@@ -148,43 +216,42 @@ local HarvestToggle = HarvestSection:Toggle({
             local gardens = workspace:FindFirstChild("Gardens")
 
             local targetFruits, hasAllFruits
+            local targetRarities, hasAllRarities
             local targetBuffs, hasAllBuffs
 
-            -- ฟังก์ชันอัปเดตตารางผลไม้/บัฟที่ถูกเลือก เพื่อประหยัดการเช็คในลูป
             local function updateSelections()
                 targetFruits = {}
                 hasAllFruits = false
-
                 if type(SelectedFruits) == "table" then
                     for k, v in pairs(SelectedFruits) do
                         local name = type(k) == "number" and v or k
-                        if name == "All" and (v == true or type(k) == "number") then
-                            hasAllFruits = true
-                            break 
-                        end
+                        if name == "All" and (v == true or type(k) == "number") then hasAllFruits = true break end
                         if v == true or type(k) == "number" then targetFruits[name] = true end
+                    end
+                end
+
+                targetRarities = {}
+                hasAllRarities = false
+                if type(SelectedRarities) == "table" then
+                    for k, v in pairs(SelectedRarities) do
+                        local name = type(k) == "number" and v or k
+                        if name == "All" and (v == true or type(k) == "number") then hasAllRarities = true break end
+                        if v == true or type(k) == "number" then targetRarities[name] = true end
                     end
                 end
 
                 targetBuffs = {}
                 hasAllBuffs = false
-
                 if type(SelectedBuffs) == "table" then
                     for k, v in pairs(SelectedBuffs) do
                         local name = type(k) == "number" and v or k
-                        if name == "All" and (v == true or type(k) == "number") then
-                            hasAllBuffs = true
-                            break
-                        end
+                        if name == "All" and (v == true or type(k) == "number") then hasAllBuffs = true break end
                         if v == true or type(k) == "number" then targetBuffs[name] = true end
                     end
                 end
             end
 
-            local updateCounter = 0
             updateSelections()
-
-            -- เริ่มการทำ Auto Harvest (TURBO MAX VERSION - Heartbeat + Parallel Processing)
             local myPlotId = lp:GetAttribute("PlotId")
             local plotName = "Plot" .. tostring(myPlotId)
 
@@ -193,43 +260,58 @@ local HarvestToggle = HarvestSection:Toggle({
 
                 pcall(function()
                     if not myPlotId or not gardens then return end
-
                     local plot = gardens:FindFirstChild(plotName)
                     if not plot then return end
-
                     local plants = plot:FindFirstChild("Plants")
                     if not plants then return end
 
-                    -- ใช้ GetChildren แทน ipairs (เร็วกว่า)
                     local plantsList = plants:GetChildren()
                     local totalPlants = #plantsList
 
-                    -- ประมวลผลแบบ Parallel - แบ่งเป็น batch ๆ ละ 15 ต้น
                     local batchSize = 15
                     for i = 1, totalPlants, batchSize do
                         task.spawn(function()
                             for j = i, math.min(i + batchSize - 1, totalPlants) do
                                 local plant = plantsList[j]
-
-                                -- หา Prompt โดยตรง (ไม่ใช้ Cache เพราะ FindFirstChildWhichIsA เร็วพอแล้ว)
                                 local prompt = plant:FindFirstChildWhichIsA("ProximityPrompt", true)
 
-                                -- เช็คว่าเก็บได้หรือไม่
                                 if prompt and prompt.ActionText == "Harvest" and prompt.Enabled then
-
-                                    local shouldHarvest = false
-
-                                    -- Fast path: ถ้าเลือก All ทั้งหมด
-                                    if hasAllFruits and hasAllBuffs then
-                                        shouldHarvest = true
-                                    else
-                                        -- Slow path: เช็คเงื่อนไข
-                                        local seedMatch = hasAllFruits or targetFruits[plant:GetAttribute("SeedName")]
-                                        local mutationMatch = hasAllBuffs or targetBuffs[plant:GetAttribute("Mutation") or "Normal"]
-                                        shouldHarvest = seedMatch and mutationMatch
+                                    -- Find the fruit part inside the plant to check its attributes
+                                    local fruitPart = nil
+                                    for _, child in ipairs(plant:GetDescendants()) do
+                                        if child:GetAttribute("SizeMulti") or child:GetAttribute("Mutation") then
+                                            fruitPart = child
+                                            break
+                                        end
                                     end
 
-                                    -- เก็บเกี่ยวแบบ Fire-and-Forget (ไม่รอ ไม่ spawn)
+                                    local shouldHarvest = false
+                                    
+                                    if fruitPart then
+                                        local fName = fruitPart:GetAttribute("FruitId") or plant:GetAttribute("SeedName") or "Unknown"
+                                        local fRarity = fruitPart:GetAttribute("Rarity") or "Common"
+                                        local fMutation = fruitPart:GetAttribute("Mutation") or "Normal"
+                                        local fSize = fruitPart:GetAttribute("SizeMulti") or 0 -- SizeMulti acts as Weight reference
+                                        
+                                        local seedMatch = hasAllFruits or targetFruits[fName]
+                                        local rarityMatch = hasAllRarities or targetRarities[fRarity]
+                                        local mutationMatch = hasAllBuffs or targetBuffs[fMutation]
+                                        
+                                        local weightMatch = true
+                                        if HarvestThresholdMode == "Harvest < Weight" then
+                                            weightMatch = fSize < HarvestWeightThreshold
+                                        elseif HarvestThresholdMode == "Harvest > Weight" then
+                                            weightMatch = fSize > HarvestWeightThreshold
+                                        end
+
+                                        shouldHarvest = seedMatch and rarityMatch and mutationMatch and weightMatch
+                                    else
+                                        -- Fallback if fruit part not found yet (just check plant)
+                                        local seedMatch = hasAllFruits or targetFruits[plant:GetAttribute("SeedName")]
+                                        local mutationMatch = hasAllBuffs or targetBuffs[plant:GetAttribute("Mutation") or "Normal"]
+                                        shouldHarvest = seedMatch and mutationMatch and (HarvestThresholdMode == "Harvest All" or HarvestWeightThreshold == 0)
+                                    end
+
                                     if shouldHarvest then
                                         prompt.HoldDuration = 0
                                         fireproximityprompt(prompt)
@@ -241,7 +323,6 @@ local HarvestToggle = HarvestSection:Toggle({
                 end)
             end)
         else
-            -- ปิดลูปเมื่อ Toggle ปิด
             if AutoHarvestTask then
                 AutoHarvestTask:Disconnect()
                 AutoHarvestTask = nil
@@ -278,12 +359,29 @@ _G.PlantSeedDropdown = PlantSeedDropdown -- เผื่ออัพเดทร
 local PlantModeDropdown = AutoPlantSection:Dropdown({
     Title = "Planting Mode",
     Desc = "Choose how seeds are arranged",
-    Values = {"Random", "Group By Type"},
+    Values = {"Random", "Group By Type", "Saved Position"},
     Value = "Random",
     Multi = false,
     Flag = "auto_plant_mode",
     Callback = function(selected)
         PlantMode = selected
+    end
+})
+
+local SavedPlantPosition = nil
+local SavePositionButton = AutoPlantSection:Button({
+    Title = "Save Position",
+    Color = Color3.fromRGB(251, 196, 3),
+    Desc = "Save your current character position for Planting Mode",
+    Callback = function()
+        pcall(function()
+            local lp = game.Players.LocalPlayer
+            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                local pos = lp.Character.HumanoidRootPart.Position
+                SavedPlantPosition = Vector3.new(pos.X, 0, pos.Z)
+                WindUI:Notify({ Title = "Success", Content = "Saved position: " .. tostring(math.floor(pos.X)) .. ", " .. tostring(math.floor(pos.Z)), Duration = 3 })
+            end
+        end)
     end
 })
 
@@ -416,7 +514,43 @@ local AutoPlantToggle = AutoPlantSection:Toggle({
                                     end
                                 end
                                 
-                                -- แบบ Random (หรือ Group หาที่ลงไม่ได้) ให้สุ่มลง PlantArea แบบใน ui.lua แท้ๆ
+                                -- แบบ Saved Position (ปลูกซ้อนจุดเดียวกันทั้งหมดโดยใช้ Y-Offset Bypass)
+                                if not spot and PlantMode == "Saved Position" and SavedPlantPosition then
+                                    local testPos = SavedPlantPosition
+                                    local finalTryPos = nil
+                                    
+                                    -- ปรับระดับ Y ให้ตรงกับแปลง (PlantArea) ถ้ายืนอยู่บนแปลง
+                                    for _, area in ipairs(plantAreas) do
+                                        local localPos = area.CFrame:PointToObjectSpace(testPos)
+                                        if math.abs(localPos.X) <= area.Size.X/2 and math.abs(localPos.Z) <= area.Size.Z/2 then
+                                            finalTryPos = area.CFrame * Vector3.new(localPos.X, area.Size.Y/2, localPos.Z)
+                                            break
+                                        end
+                                    end
+                                    
+                                    -- คำนวณจำนวนต้นไม้ที่มีอยู่แล้วที่จุดนี้ เพื่อเพิ่มความสูง Y หลบระบบเช็คระยะห่างของเซิร์ฟเวอร์
+                                    local stackCount = 0
+                                    for _, p in ipairs(existingPlants) do
+                                        if p.PrimaryPart then
+                                            local dist = Vector2.new(p.PrimaryPart.Position.X, p.PrimaryPart.Position.Z) - Vector2.new(testPos.X, testPos.Z)
+                                            if dist.Magnitude < 1 then
+                                                stackCount = stackCount + 1
+                                            end
+                                        end
+                                    end
+                                    
+                                    local baseSpot = finalTryPos or testPos
+                                    
+                                    -- แกน Y สลับขึ้นลงทีละ 3.55 studs เพื่อให้ต้นไม้ดูต่ำที่สุดเท่าที่จะทำได้
+                                    local yOffset = math.ceil(stackCount / 2) * 3.55
+                                    if stackCount % 2 == 0 and stackCount > 0 then
+                                        yOffset = -yOffset
+                                    end
+                                    
+                                    spot = baseSpot + Vector3.new(0, yOffset, 0)
+                                end
+                                
+                                -- แบบ Random (หรือ Group/Saved หาที่ลงไม่ได้) ให้สุ่มลง PlantArea แบบใน ui.lua แท้ๆ
                                 if not spot then
                                     for i = 1, 20 do
                                         local area = plantAreas[math.random(1, #plantAreas)]
@@ -1154,16 +1288,17 @@ local AutoBuyGearToggle = AutoBuyGearSection:Toggle({
     end
 })
 
--- 7.3 Auto Sell Fruit
+-- 7.3 Auto Sell (Fruits & Pets)
+-- 7.3 Auto Sell (Fruits & Pets)
 local AutoSellSection = ShopTab:Section({
-    Title = "Auto Sell Fruit",
-    Desc = "Automatically sell fruits in your inventory",
+    Title = "Auto Sell",
+    Desc = "Automatically sell fruits and pets in your inventory",
     Icon = "coins"
 })
 
 local SelectedSellFruits = {}
 local SellFruitDropdown = AutoSellSection:Dropdown({
-    Title = "Select Fruits to Sell",
+    Title = "Select Sell Fruit",
     Desc = "Which fruits should be sold automatically?",
     Values = SeedsList,
     Value = {},
@@ -1174,26 +1309,96 @@ local SellFruitDropdown = AutoSellSection:Dropdown({
     end
 })
 
+local SelectedSellMutations = {}
+local SellMutationDropdown = AutoSellSection:Dropdown({
+    Title = "Select Sell Mutation",
+    Desc = "Which mutations should be sold?",
+    Values = MutationList,
+    Value = {"All"},
+    Multi = true,
+    Flag = "sell_mutations",
+    Callback = function(selected)
+        SelectedSellMutations = selected
+    end
+})
+
+local SellThresholdMode = "Sell All"
+local SellThresholdDropdown = AutoSellSection:Dropdown({
+    Title = "Select Threshold Mode",
+    Desc = "Choose condition for selling fruits",
+    Values = {"Sell All", "Sell > Weight Threshold", "Sell < Weight Threshold"},
+    Value = "Sell All",
+    Multi = false,
+    Flag = "sell_threshold_mode",
+    Callback = function(selected)
+        SellThresholdMode = selected
+    end
+})
+
+local SellWeightThreshold = 0
+local SellWeightInput = AutoSellSection:Input({
+    Title = "Weight Threshold",
+    Desc = "if you don't want use this, just input '0'",
+    Placeholder = "0",
+    Callback = function(text)
+        SellWeightThreshold = tonumber(text) or 0
+    end
+})
+
 local AutoSellEnabled = false
 local AutoSellTask = nil
 
-local function DoAutoSell()
+local function checkMatch(selections, value)
+    local hasAll = false
+    local dict = {}
+    for k, v in pairs(selections) do
+        local n = type(k) == "number" and v or k
+        if n == "All" and (v == true or type(k) == "number") then hasAll = true end
+        if v == true or type(k) == "number" then dict[n] = true end
+    end
+    return hasAll or dict[value]
+end
+
+local function DoAutoSellFruits()
     pcall(function()
         local Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
-
-        -- ตรวจสอบว่าเลือก "All" หรือไม่
-        local isAll = false
-        for k, v in pairs(SelectedSellFruits) do
-            local fn = type(k) == "number" and v or k
-            if (v == true or type(k) == "number") and fn == "All" then
-                isAll = true break
+        local lp = game.Players.LocalPlayer
+        
+        local isAllFruits = checkMatch(SelectedSellFruits, "All")
+        local isAllMutations = checkMatch(SelectedSellMutations, "All")
+        
+        -- ถ้าไม่มี Filter พิเศษ ให้ใช้ SellAll แบบเร็ว
+        if isAllFruits and isAllMutations and SellThresholdMode == "Sell All" then
+            Networking.NPCS.SellAll:Fire()
+            return
+        end
+        
+        local function scanAndSell(parent)
+            for _, tool in ipairs(parent:GetChildren()) do
+                if tool:IsA("Tool") then
+                    local fName = tool:GetAttribute("FruitName") or tool:GetAttribute("Fruit") or tool.Name
+                    local mutation = tool:GetAttribute("Mutation") or "Normal"
+                    local weight = tool:GetAttribute("Weight") or 0
+                    local fruitId = tool:GetAttribute("Id") or tool:GetAttribute("FruitId")
+                    
+                    if fruitId and (isAllFruits or checkMatch(SelectedSellFruits, fName)) then
+                        if checkMatch(SelectedSellMutations, mutation) then
+                            local passWeight = true
+                            if SellThresholdMode == "Sell > Weight Threshold" and weight <= SellWeightThreshold then passWeight = false end
+                            if SellThresholdMode == "Sell < Weight Threshold" and weight >= SellWeightThreshold then passWeight = false end
+                            
+                            if passWeight then
+                                Networking.NPCS.SellFruit:Fire(tool.Name, tool)
+                                task.wait(0.1)
+                            end
+                        end
+                    end
+                end
             end
         end
-
-        -- ถ้าเลือก All หรือเลือกผลไม้อะไรก็ตาม ให้ขายทั้งหมดเลย
-        if isAll or (type(SelectedSellFruits) == "table" and #SelectedSellFruits > 0) then
-            Networking.NPCS.SellAll:Fire()
-        end
+        
+        if lp:FindFirstChild("Backpack") then scanAndSell(lp.Backpack) end
+        if lp.Character then scanAndSell(lp.Character) end
     end)
 end
 
@@ -1208,7 +1413,7 @@ local AutoSellToggle = AutoSellSection:Toggle({
         if AutoSellEnabled then
             AutoSellTask = task.spawn(function()
                 while AutoSellEnabled do
-                    DoAutoSell()
+                    DoAutoSellFruits()
                     task.wait(2)
                 end
             end)
@@ -1223,7 +1428,6 @@ local AutoSellToggle = AutoSellSection:Toggle({
 
 local AutoSellWhenFullEnabled = false
 local AutoSellWhenFullTask = nil
-
 local AutoSellWhenFullToggle = AutoSellSection:Toggle({
     Title = "Auto Sell When Full",
     Desc = "Automatically sell fruits only when your backpack capacity is reached",
@@ -1244,16 +1448,108 @@ local AutoSellWhenFullToggle = AutoSellSection:Toggle({
                         
                         if current >= max then
                             Networking.NPCS.SellAll:Fire()
-                            task.wait(0.5) -- หน่วงนิดนึงหลังจากขายเสร็จเพื่อป้องกันการรัวเกินไป
+                            task.wait(0.5)
                         end
                     end)
-                    task.wait(0.05) -- เช็คถี่ๆ ทุก 0.05 วินาที
+                    task.wait(0.05)
                 end
             end)
         else
             if AutoSellWhenFullTask then
                 task.cancel(AutoSellWhenFullTask)
                 AutoSellWhenFullTask = nil
+            end
+        end
+    end
+})
+
+local SelectedPets = {}
+local SellPetsDropdown = AutoSellSection:Dropdown({
+    Title = "Select Pets",
+    Desc = "Which pets should be sold?",
+    Values = PetsList,
+    Value = {"All"},
+    Multi = true,
+    Flag = "sell_pets",
+    Callback = function(selected)
+        SelectedPets = selected
+    end
+})
+
+local SelectedRarityPets = {}
+local SellPetsRarityDropdown = AutoSellSection:Dropdown({
+    Title = "Select Rarity Pets",
+    Desc = "Which pet rarities to sell?",
+    Values = PetRaritiesList,
+    Value = {"All"},
+    Multi = true,
+    Flag = "sell_pets_rarity",
+    Callback = function(selected)
+        SelectedRarityPets = selected
+    end
+})
+
+local SelectedSizePets = {}
+local SellPetsSizeDropdown = AutoSellSection:Dropdown({
+    Title = "Select Size Pets",
+    Desc = "Which pet sizes to sell?",
+    Values = PetSizesList,
+    Value = {"All"},
+    Multi = true,
+    Flag = "sell_pets_size",
+    Callback = function(selected)
+        SelectedSizePets = selected
+    end
+})
+
+local AutoSellPetEnabled = false
+local AutoSellPetTask = nil
+
+local function DoAutoSellPets()
+    pcall(function()
+        local Networking = require(game:GetService("ReplicatedStorage").SharedModules.Networking)
+        local lp = game.Players.LocalPlayer
+        
+        local function scanAndSellPet(parent)
+            for _, tool in ipairs(parent:GetChildren()) do
+                local isPet = (tool:IsA("Tool") or tool:IsA("Model")) and (tool:GetAttribute("PetId") or tool:GetAttribute("PetName"))
+                if isPet then
+                    local pName = tool:GetAttribute("PetName") or tool.Name
+                    local pRarity = tool:GetAttribute("Rarity") or "Common"
+                    local pSize = tool:GetAttribute("Size") or "Normal"
+                    
+                    if checkMatch(SelectedPets, pName) and checkMatch(SelectedRarityPets, pRarity) and checkMatch(SelectedSizePets, pSize) then
+                        Networking.NPCS.SellPet:Fire(tool.Name, tool)
+                        task.wait(0.5) -- Delay 0.5s per pet
+                    end
+                end
+            end
+        end
+        
+        if lp:FindFirstChild("Backpack") then scanAndSellPet(lp.Backpack) end
+        if lp.Character then scanAndSellPet(lp.Character) end
+    end)
+end
+
+local AutoSellPetToggle = AutoSellSection:Toggle({
+    Title = "Auto Sell Pets",
+    Desc = "Automatically sell filtered pets (One by one)",
+    Icon = "cat",
+    Value = false,
+    Flag = "auto_sell_pets",
+    Callback = function(state)
+        AutoSellPetEnabled = state
+        if AutoSellPetEnabled then
+            AutoSellPetTask = task.spawn(function()
+                while AutoSellPetEnabled do
+                    DoAutoSellPets()
+                    task.wait(2)
+                end
+            end)
+        else
+            if AutoSellPetTask then
+                task.cancel(AutoSellPetTask)
+                AutoSellPetTask = nil
             end
         end
     end
@@ -1461,6 +1757,16 @@ local MailAmountInput = AutoMailSection:Input({
     end
 })
 
+local MailMaxWeight = 0
+local MailMaxWeightInput = AutoMailSection:Input({
+    Title = "Max Fruit Weight (kg)",
+    Desc = "Send fruits ONLY IF weight is LESS than this value (0 = Send All)",
+    Placeholder = "0",
+    Callback = function(text)
+        MailMaxWeight = tonumber(text) or 0
+    end
+})
+
 local SelectedMailSeeds = {}
 local MailSeedsDropdown = AutoMailSection:Dropdown({
     Title = "Select Seeds to Send",
@@ -1625,13 +1931,16 @@ local function DoAutoMail()
                         -- ลองหา Attribute หลายแบบ
                         local fname = tool:GetAttribute("FruitName") or tool:GetAttribute("Fruit") or tool.Name
                         local fruitId = tool:GetAttribute("Id") or tool:GetAttribute("FruitId")
+                        local weight = tool:GetAttribute("Weight") or 0
 
                         -- ตรวจสอบว่าเป็นผลไม้จริงๆ (มี Id และชื่ออยู่ใน SeedsList หรือเลือก All)
                         if fruitId and fname and (isAllFruits or fruitsDict[fname]) then
-                            if not fruitToolsList[fname] then
-                                fruitToolsList[fname] = {}
+                            if MailMaxWeight == 0 or weight < MailMaxWeight then
+                                if not fruitToolsList[fname] then
+                                    fruitToolsList[fname] = {}
+                                end
+                                table.insert(fruitToolsList[fname], fruitId)
                             end
-                            table.insert(fruitToolsList[fname], fruitId)
                         end
                     end
                 end
@@ -1643,12 +1952,15 @@ local function DoAutoMail()
                     if tool:IsA("Tool") then
                         local fname = tool:GetAttribute("FruitName") or tool:GetAttribute("Fruit") or tool.Name
                         local fruitId = tool:GetAttribute("Id") or tool:GetAttribute("FruitId")
+                        local weight = tool:GetAttribute("Weight") or 0
 
                         if fruitId and fname and (isAllFruits or fruitsDict[fname]) then
-                            if not fruitToolsList[fname] then
-                                fruitToolsList[fname] = {}
+                            if MailMaxWeight == 0 or weight < MailMaxWeight then
+                                if not fruitToolsList[fname] then
+                                    fruitToolsList[fname] = {}
+                                end
+                                table.insert(fruitToolsList[fname], fruitId)
                             end
-                            table.insert(fruitToolsList[fname], fruitId)
                         end
                     end
                 end
@@ -1680,7 +1992,7 @@ local function DoAutoMail()
                 end
             end
 
-            -- 3. ส่ง Mail ในชุดละ 100 ชิ้น
+            -- 4. ส่ง Mail ในชุดละ 100 ชิ้น
             if #itemsToSend > 0 then
                 local batch = {}
                 for _, item in ipairs(itemsToSend) do
@@ -2019,9 +2331,9 @@ local AutoPickEventToggle = EventSection:Toggle({
                                                         prompt.HoldDuration = 0
                                                         fireproximityprompt(prompt)
                                                     end)
-                                                    task.wait(0.5) -- รอสักพักเพื่อให้ระบบเซิร์ฟเวอร์อัปเดตว่าเก็บเข้ากระเป๋าแล้ว
+                                                    task.wait(0.5) 
                                                 end
-                                                task.wait(0.1) -- หน่วงนิดหน่อยกันแลคเวลาไล่ตามเมล็ดที่กำลังร่วง
+                                                task.wait(0.1) 
                                             end
                                         end
                                     end
@@ -2029,7 +2341,7 @@ local AutoPickEventToggle = EventSection:Toggle({
                             end
                         end
                     end)
-                    task.wait(1) -- เช็คทุกๆ 1 วินาทีว่า Event มาหรือยัง
+                    task.wait(1) 
                 end
             end)
         else
@@ -2060,7 +2372,6 @@ local BoostFpsButton = BoostFpsSection:Button({
                 sethiddenproperty(Lighting, "Technology", 2)
             end
             
-            -- Remove Textures and Decals
             for _, v in ipairs(workspace:GetDescendants()) do
                 if v:IsA("Texture") or v:IsA("Decal") or v:IsA("ParticleEmitter") then
                     v:Destroy()
@@ -2070,7 +2381,6 @@ local BoostFpsButton = BoostFpsSection:Button({
                 end
             end
             
-            -- Optimize Rendering Settings
             settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
         end)
     end
@@ -2085,7 +2395,6 @@ local AutoDeleteOthersButton = BoostFpsSection:Button({
         if AutoDeleteTaskStarted then return end
         AutoDeleteTaskStarted = true
         
-        -- à¸—à¸³à¸‡à¸²à¸™à¹€à¸›à¹‡à¸™à¸¥à¸¹à¸›à¸­à¸­à¹‚à¸•à¹‰à¸•à¸¥à¸­à¸”à¹€à¸§à¸¥à¸²
         task.spawn(function()
             local Workspace = game:GetService("Workspace")
             local lp = game.Players.LocalPlayer
@@ -2093,16 +2402,13 @@ local AutoDeleteOthersButton = BoostFpsSection:Button({
             while true do
                 pcall(function()
                     local myPlotId = lp:GetAttribute("PlotId")
-                    -- à¸–à¹‰à¸²à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸žà¸¥à¹‡à¸­à¸•à¸‚à¸­à¸‡à¸•à¸±à¸§à¹€à¸­à¸‡ à¹ƒà¸«à¹‰à¸›à¸¥à¹ˆà¸­à¸¢à¸§à¹ˆà¸²à¸‡à¹„à¸§à¹‰à¹€à¸žà¸·à¹ˆà¸­à¸›à¹‰à¸­à¸‡à¸à¸±à¸™à¸¥à¸šà¸žà¸¥à¹‡à¸­à¸•à¸•à¸±à¸§à¹€à¸­à¸‡à¸œà¸´à¸”
                     local myPlotName = myPlotId and ("Plot" .. tostring(myPlotId)) or "NO_PLOT"
                     
                     local gardens = Workspace:FindFirstChild("Gardens")
                     if gardens then
                         for _, plot in ipairs(gardens:GetChildren()) do
-                            -- à¸¥à¸šà¸—à¸¸à¸à¸­à¸¢à¹ˆà¸²à¸‡à¹ƒà¸™à¸žà¸¥à¹‡à¸­à¸•à¸—à¸µà¹ˆà¹„à¸¡à¹ˆà¹ƒà¸Šà¹ˆà¸žà¸¥à¹‡à¸­à¸•à¸‚à¸­à¸‡à¹€à¸£à¸²
                             if plot.Name ~= myPlotName then
                                 
-                                -- à¸¥à¸šà¸•à¹‰à¸™à¹„à¸¡à¹‰
                                 local plants = plot:FindFirstChild("Plants")
                                 if plants then
                                     for _, v in ipairs(plants:GetChildren()) do
@@ -2110,7 +2416,6 @@ local AutoDeleteOthersButton = BoostFpsSection:Button({
                                     end
                                 end
                                 
-                                -- à¸¥à¸šà¸ªà¸›à¸£à¸´à¸‡à¹€à¸à¸­à¸£à¹Œ
                                 local sprinklers = plot:FindFirstChild("Sprinklers")
                                 if sprinklers then
                                     for _, v in ipairs(sprinklers:GetChildren()) do
@@ -2118,7 +2423,6 @@ local AutoDeleteOthersButton = BoostFpsSection:Button({
                                     end
                                 end
                                 
-                                -- à¸¥à¸šà¸›à¹‰à¸²à¸¢à¸•à¹ˆà¸²à¸‡à¹† (à¸¥à¸”à¹à¸¥à¸„)
                                 local signs = plot:FindFirstChild("Signs")
                                 if signs then
                                     for _, v in ipairs(signs:GetChildren()) do
@@ -2130,7 +2434,6 @@ local AutoDeleteOthersButton = BoostFpsSection:Button({
                         end
                     end
                 end)
-                -- à¹€à¸Šà¹‡à¸„à¸­à¸­à¹‚à¸•à¹‰à¸—à¸¸à¸à¹† 1 à¸§à¸´à¸™à¸²à¸—à¸µà¹€à¸œà¸·à¹ˆà¸­à¸¡à¸µà¸„à¸™à¸›à¸¥à¸¹à¸à¹ƒà¸«à¸¡à¹ˆà¸«à¸£à¸·à¸­à¸¡à¸µà¸„à¸™à¹ƒà¸«à¸¡à¹ˆà¹€à¸‚à¹‰à¸²à¸¡à¸²
                 task.wait(1)
             end
         end)
@@ -2138,3 +2441,239 @@ local AutoDeleteOthersButton = BoostFpsSection:Button({
 })
 
 Window:InitBaseTabs()
+
+-------------------------------------------------------------------------------
+-- [ PET ALERT SYSTEM - WEBHOOK & WEB API ]
+-------------------------------------------------------------------------------
+task.spawn(function()
+    local lp = game:GetService("Players").LocalPlayer or game:GetService("Players").PlayerAdded:Wait()
+    task.wait(2)
+
+    local Config = {
+        TargetPets = {
+            "Golden Dragonfly",
+            "Unicorn",
+            "Raccoon"
+        },
+        WebhookURL1 = "https://discord.com/api/webhooks/1519275368283111424/jK3_OYM_1zbEGflIS9LW7tkpglCOsytERwS_8KBGuB9f9uhBEZTVlAQ6x12axDKj8b5o",
+        WebhookURL2 = "https://discord.com/api/webhooks/1516683892114067558/7PSc7KGuvoKct6TI97s_zTu-SxMHvuBtStypwM538Woc0QDu_ExeFQBcoo0rp0EJfonb",
+        WebAPIURL = "https://longong.xyz/receiveUi.php",
+        CheckInterval = 0.5
+    }
+
+    local PetRarity = {
+        frog = "Common", bunny = "Uncommon", owl = "Rare",
+        deer = "Epic", robin = "Epic", bee = "Mythic",
+        monkey = "Mythic", ["black dragon"] = "Mythic",
+        ["golden dragonfly"] = "Legendary", unicorn = "Legendary",
+        raccoon = "Legendary"
+    }
+
+    local RarityColors = {
+        Common = 0xA8A8A8, Uncommon = 0x57F287, Rare = 0x3498DB,
+        Epic = 0x9B59B6, Mythic = 0xF1C40F, Legendary = 0xE74C3C
+    }
+
+    local PetEmojis = {
+        frog = "🐸", bunny = "🐰", owl = "🦉", deer = "🦌",
+        robin = "🐦", bee = "🐝", monkey = "🐵",
+        ["black dragon"] = "🐉", ["golden dragonfly"] = "✨",
+        unicorn = "🦄", raccoon = "🦝"
+    }
+
+    local PetImages = {
+        frog = "https://tr.rbxcdn.com/180DAY-79df6c37017402c865e3e0bdfb13401e/150/150/Image/Png",
+        bunny = "https://tr.rbxcdn.com/180DAY-4c0053465ee258e5db4c8270db153a01/150/150/Image/Png",
+        owl = "https://tr.rbxcdn.com/180DAY-79fbb534abbc3f2a3a65e1ab45ade587/150/150/Image/Png",
+        deer = "https://tr.rbxcdn.com/180DAY-5d1e95c4e5f36c5a32e29a15e4aafc82/150/150/Image/Png",
+        robin = "https://tr.rbxcdn.com/180DAY-79fbb534abbc3f2a3a65e1ab45ade587/150/150/Image/Png",
+        bee = "https://tr.rbxcdn.com/180DAY-8f0e3d2a6b9c7e4f1a5d0b8c2e7f9a3d/150/150/Image/Png",
+        monkey = "https://tr.rbxcdn.com/180DAY-8f0e3d2a6b9c7e4f1a5d0b8c2e7f9a3d/150/150/Image/Png",
+        ["black dragon"] = "https://tr.rbxcdn.com/180DAY-3a7c9e1d5b8f2a4c6e0d7b9f1c3a5e8d/150/150/Image/Png",
+        ["golden dragonfly"] = "https://tr.rbxcdn.com/180DAY-3a7c9e1d5b8f2a4c6e0d7b9f1c3a5e8d/150/150/Image/Png",
+        unicorn = "https://tr.rbxcdn.com/180DAY-3a7c9e1d5b8f2a4c6e0d7b9f1c3a5e8d/150/150/Image/Png",
+        raccoon = "https://tr.rbxcdn.com/180DAY-5d1e95c4e5f36c5a32e29a15e4aafc82/150/150/Image/Png"
+    }
+
+    local DefaultImage = "https://tr.rbxcdn.com/391d1796dcd37e4da2405d415d8f6ab6/150/150/Image/Png"
+
+    local sentPets = {}  
+
+    local function getPetNameFromObject(obj)
+        local petName = obj:GetAttribute("PetName")
+        if not petName or petName == "" then
+            if string.find(obj.Name, "_") then
+                local parts = string.split(obj.Name, "_")
+                petName = #parts >= 2 and parts[2] or obj.Name
+            else
+                petName = obj.Name
+            end
+        end
+        return petName
+    end
+
+    local function sendToWeb(petName, playerCount, teleportCommand)
+        local http_request = (syn and syn.request) or (http and http.request) or http_request or request
+        if not http_request then return false end
+
+        local jobId = game.JobId ~= "" and game.JobId or "NoJobId_" .. tostring(math.random(100000, 999999))
+        local username = lp.Name or "Unknown"
+        local placeId = tostring(game.PlaceId)
+
+        local data = {
+            jobId = jobId,
+            placeId = placeId,
+            players = playerCount,
+            teleport = teleportCommand,
+            petName = petName,
+            username = username,
+            timestamp = os.time()
+        }
+
+        pcall(function()
+            http_request({
+                Url = Config.WebAPIURL,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = game:GetService("HttpService"):JSONEncode(data)
+            })
+        end)
+
+        return true
+    end
+
+    local function sendWebhook(petName, petObj)
+        local http_request = (syn and syn.request) or (http and http.request) or http_request or request
+        if not http_request then return end
+
+        pcall(function()
+            local lowerName = string.lower(petName)
+            local rarity = PetRarity[lowerName] or "Common"
+            local color = RarityColors[rarity] or 0x57F287
+            local emoji = PetEmojis[lowerName] or "🐾"
+            local imageUrl = PetImages[lowerName] or DefaultImage
+
+            local price = "N/A"
+            local costTimer = petObj:FindFirstChild("PetCostTimer", true)
+            if costTimer then
+                local label = costTimer:FindFirstChildWhichIsA("TextLabel")
+                if label and label.Text ~= "" then
+                    price = label.Text:gsub("¢", "")
+                end
+            end
+
+            local timeLeft = "N/A"
+            local leaveTimer = petObj:FindFirstChild("PetLeaveTimer", true)
+            if leaveTimer then
+                local label = leaveTimer:FindFirstChildWhichIsA("TextLabel")
+                if label and label.Text ~= "" then
+                    timeLeft = label.Text
+                end
+            end
+
+            local jobId = game.JobId ~= "" and game.JobId or "NoJobId"
+            local shortJobId = jobId == "NoJobId" and "Private/Test" or jobId:sub(1,8) .. "..."
+            local placeId = tostring(game.PlaceId)
+            local joinUrl = "https://afz-oos.github.io/tt/?placeId=" .. placeId .. "&jobId=" .. jobId
+            local scriptCopy = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. placeId .. ", '" .. jobId .. "')"
+
+            local data = {
+                username = "🐾 Pet Alert",
+                embeds = {{
+                    title = "🔔 พบสัตว์เลี้ยงใหม่!",
+                    description = "🚀 **[คลิกที่นี่เพื่อเปิดเข้าเกมทันที](" .. joinUrl .. ")**\\n\\n**Place ID:** `" .. placeId .. "`\\n**Server ID:** `" .. jobId .. "`\\n**Short JobId:** `" .. shortJobId .. "`\\n**Players:** `" .. #game.Players:GetPlayers() .. "/" .. game.Players.MaxPlayers .. "`\\n\\n📌 **ก๊อปปี้ไปวางใน Executor เพื่อวาร์ปเข้าเซิร์ฟ:**\\n```lua\\n" .. scriptCopy .. "\\n```",
+                    color = color,
+                    fields = {{
+                        name = emoji .. " " .. petName,
+                        value = "Rarity: `" .. rarity .. "`\\nPrice: `¢" .. tostring(price) .. "`\\nLeft: `" .. timeLeft .. "`",
+                        inline = true
+                    }},
+                    thumbnail = { url = imageUrl },
+                    footer = { text = "วันนี้ เวลา " .. os.date("%H:%M") }
+                }}
+            }
+
+            local jsonData = game:GetService("HttpService"):JSONEncode(data)
+
+            task.spawn(function()
+                pcall(function()
+                    http_request({
+                        Url = Config.WebhookURL1,
+                        Method = "POST",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = jsonData
+                    })
+                end)
+            end)
+
+            task.spawn(function()
+                pcall(function()
+                    http_request({
+                        Url = Config.WebhookURL2,
+                        Method = "POST",
+                        Headers = {["Content-Type"] = "application/json"},
+                        Body = jsonData
+                    })
+                end)
+            end)
+        end)
+    end
+
+    local function scanAndSend()
+        local mapFolder = workspace:FindFirstChild("Map")
+        if not mapFolder then return end
+
+        local spawnsFolder = mapFolder:FindFirstChild("WildPetSpawns")
+        if not spawnsFolder then return end
+
+        local targetPets = {}
+        for _, petName in next, Config.TargetPets do
+            targetPets[string.lower(petName)] = petName
+        end
+
+        for _, obj in next, spawnsFolder:GetChildren() do
+            if obj:IsA("Model") then
+                local petName = getPetNameFromObject(obj)
+                local lowerPet = string.lower(petName)
+
+                for lowerKey, origName in next, targetPets do
+                    if lowerPet == lowerKey then
+                        local petKey = obj:GetDebugId()
+
+                        if sentPets[petKey] then
+                            return false
+                        end
+
+                        local placeId = game.PlaceId
+                        local jobId = game.JobId
+                        local teleportCmd = "game:GetService('TeleportService'):TeleportToPlaceInstance(" ..
+                                            tostring(placeId) .. ", '" .. jobId .. "')"
+                        local playerCount = #game.Players:GetPlayers()
+
+                        sendWebhook(petName, obj)
+                        sendToWeb(petName, playerCount, teleportCmd)
+
+                        sentPets[petKey] = true
+
+                        task.spawn(function()
+                            while obj and obj.Parent do
+                                task.wait(1)
+                            end
+                            sentPets[petKey] = nil
+                        end)
+
+                        return true
+                    end
+                end
+            end
+        end
+
+        return false
+    end
+
+    while task.wait(Config.CheckInterval) do
+        pcall(scanAndSend)
+    end
+end)
