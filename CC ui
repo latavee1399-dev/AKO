@@ -18,7 +18,7 @@ local Window = WindUI:CreateWindow({
     Folder = "GAG2Hub",
     Size = UDim2.fromOffset(580, 460),
     Transparent = true,
-    Theme = "Amber",
+    Theme = "Midnight",
     SideBarWidth = 200,
 })
 
@@ -492,7 +492,7 @@ function Window:InitBaseTabs()
     })
 
     SectionInfo:Paragraph({
-        Title   = "Chick Chick",
+        Title   = "Delex Hub",
         Color   = Color3.fromRGB(251, 196, 3),
         Content = "Created By Ao Pro Free\nVersion: 2.0.0\nUI: WindUI by Footagesus",
     })
