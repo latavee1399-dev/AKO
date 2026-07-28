@@ -691,7 +691,7 @@ function Window:InitBaseTabs()
     SectionConfig:Dropdown({
         Title       = "Theme",
         Description = "เลือก Theme ของ UI",
-        Values      = {"Dark", "Light", "Midnight", "Amber", "Aqua"},
+        Values      = {"Dark", "Light", "Midnight", "Amber", "Aqua", "Rose", "Plant", "Red", "Indigo", "Sky", "Violet", "Emerald", "Crimson", "MonoKai Pro", "Cotton Candy", "Mellowsi", "Rianbow"},
         Default     = "Amber",
         Callback    = function(Value) WindUI:SetTheme(Value) end,
     })
