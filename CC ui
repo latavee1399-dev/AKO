@@ -493,7 +493,6 @@ function Window:InitBaseTabs()
 
     SectionInfo:Paragraph({
         Title   = "Delex Hub",
-        Icon    = "https://img1.pic.in.th/images/DX.png",
         Color   = Color3.fromRGB(251, 196, 3),
         Content = "Created By Ao Pro Free\nVersion: 2.0.0\nUI: WindUI by Footagesus",
     })
