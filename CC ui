@@ -4,9 +4,6 @@
 -- =============================================
 
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-local HUB_ICON = "sparkles"
-local HUB_IMAGE = "https://img1.pic.in.th/images/DX.png"
-local HUB_TOGGLE_TEXT = "DX"
 
 -- =============================================
 -- Setup
@@ -16,7 +13,7 @@ WindUI:SetNotificationLower(true)
 
 local Window = WindUI:CreateWindow({
     Title = "Delex Hub",
-    Icon = HUB_ICON,
+    Icon = "rbxassetid://76435382241103",
     Author = "Roblox Script ",
     Folder = "GAG2Hub",
     Size = UDim2.fromOffset(580, 460),
@@ -489,7 +486,7 @@ function Window:InitBaseTabs()
     })
 
     SectionInfo:Image({
-        Image = HUB_IMAGE,
+        Image = "rbxassetid://76435382241103",
         AspectRatio = "16:9",
         Radius = 12,
     })
@@ -725,7 +722,7 @@ function Window:InitBaseTabs()
         Title   = "Delex Hub",
         Content = "Successfully loaded Script! Enjoy your time in Roblox.!",
         Duration = 5,
-        Icon    = HUB_IMAGE,
+        Icon    = "rbxassetid://76435382241103",
     })
 
     -- =============================================
@@ -770,7 +767,7 @@ function Window:InitBaseTabs()
     toggleBtn.BackgroundTransparency = 0.3
     toggleBtn.Position = UDim2.new(0, 20, 0, 20)
     toggleBtn.Size = UDim2.new(0, 50, 0, 50)
-    toggleBtn.Image = ""
+    toggleBtn.Image = "rbxassetid://76435382241103"
 
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 12)
@@ -781,17 +778,6 @@ function Window:InitBaseTabs()
     stroke.Transparency = 0.5
     stroke.Thickness = 1.5
     stroke.Parent = toggleBtn
-
-    local toggleLabel = Instance.new("TextLabel")
-    toggleLabel.Name = "ToggleLabel"
-    toggleLabel.Parent = toggleBtn
-    toggleLabel.BackgroundTransparency = 1
-    toggleLabel.Size = UDim2.fromScale(1, 1)
-    toggleLabel.Font = Enum.Font.GothamBold
-    toggleLabel.Text = HUB_TOGGLE_TEXT
-    toggleLabel.TextColor3 = Color3.fromRGB(251, 196, 3)
-    toggleLabel.TextSize = 18
-    toggleLabel.ZIndex = toggleBtn.ZIndex + 1
 
     -- Dragging Logic
     local dragging
