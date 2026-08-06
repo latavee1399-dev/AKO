@@ -741,6 +741,13 @@ local AimState = {
     FOVRadius = 120,
     TargetType = "Player",
     TargetPart = "Head",
+    Smoothing = true,
+    SmoothingFactor = 0.18,
+    Prediction = true,
+    PredictionStrength = 0.12,
+    StickyTarget = true,
+    VisibilityCheck = true,
+    AutoShoot = false,
 }
 
 assert(AimState.HoldBind == Enum.UserInputType.MouseButton2, "Aimbot hold key default must be MouseButton2")
@@ -750,6 +757,7 @@ local AimConnection = nil
 local FOVCircle = nil
 local AimMonsterTargets = {}
 local AimMonsterRefreshAt = 0
+local AimCurrentTarget = nil
 
 if _G._twdoAimConnection then
     pcall(function()
@@ -893,47 +901,113 @@ local function getAimMonsterTargets()
     return AimMonsterTargets
 end
 
-local function getAimTargetScore(camera, mouseLocation, targetPart, bestScore)
-    if not targetPart or not targetPart:IsA("BasePart") then
-        return nil
+local function isTargetVisible(targetPart)
+    if not AimState.VisibilityCheck then
+        return true
     end
 
-    local viewportPoint, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+    local camera = getCamera()
+    local origin = camera.CFrame.Position
+    local direction = (targetPart.Position - origin).Unit
+    local distance = (targetPart.Position - origin).Magnitude
+
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.FilterDescendantsInstances = { LocalPlayer.Character, targetPart.Parent }
+    raycastParams.IgnoreWater = true
+
+    local result = Workspace:Raycast(origin, direction * distance, raycastParams)
+
+    return not result or result.Instance:IsDescendantOf(targetPart.Parent)
+end
+
+local function getTargetVelocity(targetPart)
+    if not targetPart or not targetPart:IsA("BasePart") then
+        return Vector3.new(0, 0, 0)
+    end
+
+    local velocity = targetPart.AssemblyLinearVelocity
+    if velocity and velocity.Magnitude > 0 then
+        return velocity
+    end
+
+    return Vector3.new(0, 0, 0)
+end
+
+local function getPredictedPosition(targetPart)
+    if not AimState.Prediction or not targetPart then
+        return targetPart.Position
+    end
+
+    local velocity = getTargetVelocity(targetPart)
+    local predictionTime = AimState.PredictionStrength
+
+    return targetPart.Position + (velocity * predictionTime)
+end
+
+local function getAimTargetScore(camera, mouseLocation, targetPart, bestScore)
+    if not targetPart or not targetPart:IsA("BasePart") then
+        return nil, nil
+    end
+
+    if not isTargetVisible(targetPart) then
+        return nil, nil
+    end
+
+    local targetPosition = getPredictedPosition(targetPart)
+    local viewportPoint, onScreen = camera:WorldToViewportPoint(targetPosition)
+
     if viewportPoint.Z <= 0 then
-        return nil
+        return nil, nil
     end
 
     local offsetX = viewportPoint.X - mouseLocation.X
     local offsetY = viewportPoint.Y - mouseLocation.Y
-    local distance = math.sqrt((offsetX * offsetX) + (offsetY * offsetY))
+    local screenDistance = math.sqrt((offsetX * offsetX) + (offsetY * offsetY))
 
-    if (not AimState.UseFOV or (onScreen and distance <= AimState.FOVRadius)) and distance < bestScore then
-        return distance
+    local origin = getLocalOrigin()
+    local worldDistance = (targetPosition - origin).Magnitude
+
+    -- คะแนนผสม: ระยะบนหน้าจอ (70%) + ระยะในโลก (30%)
+    local score = (screenDistance * 0.7) + ((worldDistance / 100) * 0.3)
+
+    if (not AimState.UseFOV or (onScreen and screenDistance <= AimState.FOVRadius)) and score < bestScore then
+        return score, targetPosition
     end
 
-    return nil
+    return nil, nil
 end
 
 local function getBestTarget()
     local camera = getCamera()
     if not camera then
-        return nil
+        return nil, nil
     end
 
     local mouseLocation = UserInputService:GetMouseLocation()
     local bestPart = nil
+    local bestPosition = nil
     local bestScore = math.huge
+
+    -- ถ้ามี Sticky Target และเป้าเดิมยังอยู่ใน FOV ให้ใช้เป้าเดิมต่อ
+    if AimState.StickyTarget and AimCurrentTarget and AimCurrentTarget.Parent then
+        local currentScore, currentPosition = getAimTargetScore(camera, mouseLocation, AimCurrentTarget, math.huge)
+        if currentScore then
+            return AimCurrentTarget, currentPosition
+        end
+    end
 
     if AimState.TargetType == "Monster" then
         for _, monster in next, getAimMonsterTargets() do
             local humanoid = getCharacterHumanoid(monster)
             if monster and monster.Parent and humanoid and humanoid.Health > 0 then
                 local targetPart = getTargetPart(monster)
-                local score = getAimTargetScore(camera, mouseLocation, targetPart, bestScore)
+                local score, position = getAimTargetScore(camera, mouseLocation, targetPart, bestScore)
 
                 if score then
                     bestScore = score
                     bestPart = targetPart
+                    bestPosition = position
                 end
             end
         end
@@ -943,18 +1017,19 @@ local function getBestTarget()
                 local character = getAliveCharacter(player)
                 if character then
                     local targetPart = getTargetPart(character)
-                    local score = getAimTargetScore(camera, mouseLocation, targetPart, bestScore)
+                    local score, position = getAimTargetScore(camera, mouseLocation, targetPart, bestScore)
 
                     if score then
                         bestScore = score
                         bestPart = targetPart
+                        bestPosition = position
                     end
                 end
             end
         end
     end
 
-    return bestPart
+    return bestPart, bestPosition
 end
 
 local function stopAimLoop()
@@ -966,6 +1041,7 @@ local function stopAimLoop()
     _G._twdoAimConnection = nil
     AimMonsterTargets = {}
     AimMonsterRefreshAt = 0
+    AimCurrentTarget = nil
     resetSharedMonsterTargets()
     destroyFOVCircle()
 end
@@ -1002,10 +1078,26 @@ local function startAimLoop()
             return
         end
 
-        local targetPart = getBestTarget()
-        if targetPart then
-            -- ponytail: camera lock only; upgrade path is hooking GunClient fire path for true bullet-level silent aim.
-            camera.CFrame = CFrame.new(camera.CFrame.Position, targetPart.Position)
+        local targetPart, targetPosition = getBestTarget()
+        if targetPart and targetPosition then
+            -- อัพเดท current target
+            AimCurrentTarget = targetPart
+
+            local cameraCFrame = camera.CFrame
+            local targetDirection = (targetPosition - cameraCFrame.Position).Unit
+
+            if AimState.Smoothing then
+                -- Smoothing แบบ exponential
+                local currentDirection = cameraCFrame.LookVector
+                local smoothedDirection = currentDirection:Lerp(targetDirection, AimState.SmoothingFactor)
+                camera.CFrame = CFrame.new(cameraCFrame.Position, cameraCFrame.Position + smoothedDirection)
+            else
+                -- Lock แบบทันที
+                camera.CFrame = CFrame.new(cameraCFrame.Position, targetPosition)
+            end
+        else
+            -- หลุดเป้า
+            AimCurrentTarget = nil
         end
     end)
 
@@ -1064,6 +1156,13 @@ local ESPState = {
     },
 }
 
+-- Performance settings (declare ก่อนใช้งาน)
+local ESP_MAX_DISTANCE_STUDS = 2500
+local ESP_PLAYER_UPDATE_RATE = 0.1
+local ESP_MONSTER_UPDATE_RATE = 0.35
+local ESP_CHEST_UPDATE_RATE = 0.7
+local ESP_MAX_VISIBLE_ITEMS = 50
+
 local ESPConnection = nil
 local ESPRefreshMonsterAt = 0
 local ESPRefreshChestAt = 0
@@ -1113,6 +1212,8 @@ local function updatePlayerESP()
         return
     end
 
+    local playerCount = 0
+
     for _, player in next, Players:GetPlayers() do
         if player ~= LocalPlayer then
             local character = getAliveCharacter(player)
@@ -1120,75 +1221,71 @@ local function updatePlayerESP()
             local humanoid = getCharacterHumanoid(character)
 
             if character and root and humanoid then
-                local bundle = ESPDrawings.Player[player]
-                if not bundle then
-                    bundle = {
-                        Box = createSquareDrawing(),
-                        Text = createTextDrawing(),
-                        TopText = createTextDrawing(),
-                        Highlight = createHighlightInstance(ESPState.Player.Color),
-                    }
-                    ESPDrawings.Player[player] = bundle
-                end
-
                 local rawDistance = (root.Position - origin).Magnitude
-                local hp = math.floor(humanoid.Health + 0.5)
-                local maxHp = math.floor((humanoid.MaxHealth > 0 and humanoid.MaxHealth) or humanoid.Health + 0.5)
-                local distanceStuds = math.floor(rawDistance + 0.5)
-                local distanceMeters = roundNumber(studsToMeters(rawDistance), 1)
 
-                if bundle and bundle.Highlight then
-                    bundle.Highlight.Adornee = character
-                    bundle.Highlight.FillColor = ESPState.Player.Color
-                    bundle.Highlight.OutlineColor = ESPState.Player.Color
-                    -- บังคับ FillTransparency ทุกครั้งที่ enable
-                    -- เพราะบาง executor reset ค่ากลับทำให้เห็นคนเป็นตัวขาวทั้งตัว
-                    bundle.Highlight.FillTransparency = 1
-                    bundle.Highlight.OutlineTransparency = 0
-                    bundle.Highlight.Enabled = true
+                -- Skip players ที่ไกลเกินไป
+                if rawDistance <= ESP_MAX_DISTANCE_STUDS then
+                    playerCount = playerCount + 1
+                    if playerCount <= ESP_MAX_VISIBLE_ITEMS then
+                        local bundle = ESPDrawings.Player[player]
+                        if not bundle then
+                            bundle = {
+                                Box = createSquareDrawing(),
+                                Text = createTextDrawing(),
+                                TopText = createTextDrawing(),
+                                Highlight = createHighlightInstance(ESPState.Player.Color),
+                            }
+                            ESPDrawings.Player[player] = bundle
+                        end
+
+                        local hp = math.floor(humanoid.Health + 0.5)
+                        local maxHp = math.floor((humanoid.MaxHealth > 0 and humanoid.MaxHealth) or humanoid.Health + 0.5)
+                        local distanceMeters = roundNumber(studsToMeters(rawDistance), 1)
+
+                        if bundle and bundle.Highlight then
+                            bundle.Highlight.Adornee = character
+                            bundle.Highlight.FillColor = ESPState.Player.Color
+                            bundle.Highlight.OutlineColor = ESPState.Player.Color
+                            bundle.Highlight.FillTransparency = 1
+                            bundle.Highlight.OutlineTransparency = 0
+                            bundle.Highlight.Enabled = true
+                        end
+
+                        local boxPos, boxSize, textPos = getCharacterBoxBounds(character)
+                        if boxPos and boxSize and textPos then
+                            if bundle and bundle.Box then
+                                bundle.Box.Color = ESPState.Player.Color
+                                bundle.Box.Position = boxPos
+                                bundle.Box.Size = boxSize
+                                bundle.Box.Visible = true
+                            end
+
+                            if bundle and bundle.Text then
+                                bundle.Text.Text = player.Name .. "\n" .. hp .. "/" .. maxHp .. "\n" .. distanceMeters .. "m"
+                                bundle.Text.Color = ESPState.Player.Color
+                                bundle.Text.Size = 13
+                                bundle.Text.Position = Vector2.new(textPos.X, textPos.Y + 6)
+                                bundle.Text.Visible = true
+                            end
+
+                            if bundle and bundle.TopText then
+                                bundle.TopText.Visible = false
+                            end
+                        elseif bundle then
+                            if bundle.Box then
+                                bundle.Box.Visible = false
+                            end
+                            if bundle.Text then
+                                bundle.Text.Visible = false
+                            end
+                            if bundle.TopText then
+                                bundle.TopText.Visible = false
+                            end
+                        end
+
+                        seen[player] = true
+                    end
                 end
-
-                local boxPos, boxSize, textPos = getCharacterBoxBounds(character)
-                if boxPos and boxSize and textPos then
-                    if bundle and bundle.Box then
-                        bundle.Box.Color = ESPState.Player.Color
-                        bundle.Box.Position = boxPos
-                        bundle.Box.Size = boxSize
-                        bundle.Box.Visible = true
-                    end
-
-                    if bundle and bundle.TopText then
-                        bundle.TopText.Text = "Name: " .. player.Name
-                            .. " | Health: " .. hp
-                            .. " | Studs: " .. distanceStuds
-                        bundle.TopText.Color = Color3.fromRGB(255, 255, 255)
-                        bundle.TopText.Size = 15
-                        bundle.TopText.Position = Vector2.new(textPos.X, textPos.Y - 18)
-                        bundle.TopText.Visible = true
-                    end
-
-                    if bundle and bundle.Text then
-                        bundle.Text.Text = "Name:" .. player.Name
-                            .. "\nHP:" .. hp .. "/" .. maxHp
-                            .. "\nDist:" .. distanceMeters .. "m"
-                        bundle.Text.Color = ESPState.Player.Color
-                        bundle.Text.Size = 14
-                        bundle.Text.Position = Vector2.new(textPos.X, textPos.Y + 6)
-                        bundle.Text.Visible = true
-                    end
-                elseif bundle then
-                    if bundle.Box then
-                        bundle.Box.Visible = false
-                    end
-                    if bundle.Text then
-                        bundle.Text.Visible = false
-                    end
-                    if bundle.TopText then
-                        bundle.TopText.Visible = false
-                    end
-                end
-
-                seen[player] = true
             end
         end
     end
@@ -1227,58 +1324,70 @@ local function updateMonsterESP()
 
     if os.clock() >= ESPRefreshMonsterAt then
         refreshMonsterTargets()
-        ESPRefreshMonsterAt = os.clock() + 2.5
+        ESPRefreshMonsterAt = os.clock() + 3
     end
+
+    local monsterCount = 0
 
     for _, monster in next, MonsterTargets do
         if monster and monster.Parent then
-            local bundle = ESPDrawings.Monster[monster]
-            if not bundle then
-                bundle = {
-                    Box = createSquareDrawing(),
-                    Text = createTextDrawing(),
-                    Highlight = createHighlightInstance(ESPState.Monster.Color),
-                }
-                ESPDrawings.Monster[monster] = bundle
+            local anchorPart = getCharacterRoot(monster) or getBestPartFromModel(monster)
+            if anchorPart then
+                local rawDistance = (anchorPart.Position - origin).Magnitude
+                if rawDistance <= ESP_MAX_DISTANCE_STUDS then
+                    monsterCount = monsterCount + 1
+                    if monsterCount <= ESP_MAX_VISIBLE_ITEMS then
+                        local bundle = ESPDrawings.Monster[monster]
+                        if not bundle then
+                            bundle = {
+                                Box = createSquareDrawing(),
+                                Text = createTextDrawing(),
+                                Highlight = createHighlightInstance(ESPState.Monster.Color),
+                            }
+                            ESPDrawings.Monster[monster] = bundle
+                        end
+
+                        if bundle and bundle.Highlight then
+                            bundle.Highlight.Adornee = monster
+                            bundle.Highlight.FillColor = ESPState.Monster.Color
+                            bundle.Highlight.OutlineColor = ESPState.Monster.Color
+                            bundle.Highlight.FillTransparency = 1
+                            bundle.Highlight.OutlineTransparency = 0
+                            bundle.Highlight.Enabled = true
+                        end
+
+                        local boxPos, boxSize, textPos = getCharacterBoxBounds(monster)
+                        if boxPos and boxSize and textPos then
+                            if bundle and bundle.Box then
+                                bundle.Box.Color = ESPState.Monster.Color
+                                bundle.Box.Position = boxPos
+                                bundle.Box.Size = boxSize
+                                bundle.Box.Visible = true
+                            end
+
+                            if bundle and bundle.Text then
+                                local typeName = getModelTypeName(monster, monster.Name)
+                                local distanceMeters = roundNumber(studsToMeters(rawDistance), 1)
+
+                                bundle.Text.Text = typeName .. "\n" .. distanceMeters .. "m"
+                                bundle.Text.Color = ESPState.Monster.Color
+                                bundle.Text.Size = 13
+                                bundle.Text.Position = textPos
+                                bundle.Text.Visible = true
+                            end
+                        elseif bundle then
+                            if bundle.Box then
+                                bundle.Box.Visible = false
+                            end
+                            if bundle.Text then
+                                bundle.Text.Visible = false
+                            end
+                        end
+
+                        seen[monster] = true
+                    end
+                end
             end
-
-            if bundle and bundle.Highlight then
-                bundle.Highlight.Adornee = monster
-                bundle.Highlight.FillColor = ESPState.Monster.Color
-                bundle.Highlight.OutlineColor = ESPState.Monster.Color
-                bundle.Highlight.Enabled = true
-            end
-
-            local boxPos, boxSize, textPos = getCharacterBoxBounds(monster)
-            if boxPos and boxSize and textPos then
-                if bundle and bundle.Box then
-                    bundle.Box.Color = ESPState.Monster.Color
-                    bundle.Box.Position = boxPos
-                    bundle.Box.Size = boxSize
-                    bundle.Box.Visible = true
-                end
-
-                if bundle and bundle.Text then
-                    local typeName = getModelTypeName(monster, monster.Name)
-                    local anchorPart = getCharacterRoot(monster) or getBestPartFromModel(monster)
-                    local anchor = anchorPart and anchorPart.Position or Vector3.zero
-                    local distanceMeters = roundNumber(studsToMeters((anchor - origin).Magnitude), 1)
-
-                    bundle.Text.Text = "Type: " .. typeName .. "\nDist: " .. distanceMeters .. "m"
-                    bundle.Text.Color = ESPState.Monster.Color
-                    bundle.Text.Position = textPos
-                    bundle.Text.Visible = true
-                end
-            elseif bundle then
-                if bundle.Box then
-                    bundle.Box.Visible = false
-                end
-                if bundle.Text then
-                    bundle.Text.Visible = false
-                end
-            end
-
-            seen[monster] = true
         end
     end
 
@@ -1351,42 +1460,50 @@ local function updateChestESP()
 
     if os.clock() >= ESPRefreshChestAt then
         refreshChestTargets()
-        ESPRefreshChestAt = os.clock() + 4
+        ESPRefreshChestAt = os.clock() + 5
     end
+
+    local chestCount = 0
 
     for _, chest in next, ChestTargets do
         if chest and chest.Parent then
             local boxPos, boxSize, textPos, anchor = getBoxBounds(chest)
             if boxPos and boxSize and textPos then
-                local bundle = ESPDrawings.Chest[chest]
-                if not bundle then
-                    bundle = {
-                        Box = createSquareDrawing(),
-                        Text = createTextDrawing(),
-                    }
-                    ESPDrawings.Chest[chest] = bundle
+                local rawDistance = (anchor - origin).Magnitude
+                if rawDistance <= ESP_MAX_DISTANCE_STUDS then
+                    chestCount = chestCount + 1
+                    if chestCount <= ESP_MAX_VISIBLE_ITEMS then
+                        local bundle = ESPDrawings.Chest[chest]
+                        if not bundle then
+                            bundle = {
+                                Box = createSquareDrawing(),
+                                Text = createTextDrawing(),
+                            }
+                            ESPDrawings.Chest[chest] = bundle
+                        end
+
+                        if bundle and bundle.Box then
+                            bundle.Box.Color = ESPState.Chest.Color
+                            bundle.Box.Position = boxPos
+                            bundle.Box.Size = boxSize
+                            bundle.Box.Visible = true
+                        end
+
+                        if bundle and bundle.Text then
+                            local distanceMeters = roundNumber(studsToMeters(rawDistance), 1)
+                            local chestName = chest.Name:gsub("Loot_", ""):gsub("loot_", ""):gsub("_", " ")
+                            local text = chestName .. "\n" .. distanceMeters .. "m"
+
+                            bundle.Text.Text = text
+                            bundle.Text.Color = ESPState.Chest.Color
+                            bundle.Text.Size = 13
+                            bundle.Text.Position = textPos
+                            bundle.Text.Visible = true
+                        end
+
+                        seen[chest] = true
+                    end
                 end
-
-                if bundle and bundle.Box then
-                    bundle.Box.Color = ESPState.Chest.Color
-                    bundle.Box.Position = boxPos
-                    bundle.Box.Size = boxSize
-                    bundle.Box.Visible = true
-                end
-
-                if bundle and bundle.Text then
-                    local lootText = getCachedChestLootText(chest)
-                    local distanceMeters = roundNumber(studsToMeters((anchor - origin).Magnitude), 1)
-                    local chestName = chest.Name
-                    local text = "Chest: " .. chestName .. "\n" .. lootText .. "\nDist: " .. distanceMeters .. "m"
-
-                    bundle.Text.Text = text
-                    bundle.Text.Color = ESPState.Chest.Color
-                    bundle.Text.Position = textPos
-                    bundle.Text.Visible = true
-                end
-
-                seen[chest] = true
             end
         end
     end
@@ -1425,14 +1542,14 @@ local function refreshESPConnection()
             while ESPWorkerRunning do
                 local now = os.clock()
 
-                if ESPState.Player.Enabled and (now - ESPLastPlayerUpdate) >= 0.08 then
+                if ESPState.Player.Enabled and (now - ESPLastPlayerUpdate) >= ESP_PLAYER_UPDATE_RATE then
                     updatePlayerESP()
                     ESPLastPlayerUpdate = now
                 elseif not ESPState.Player.Enabled then
                     clearDrawingMap(ESPDrawings.Player)
                 end
 
-                if ESPState.Monster.Enabled and (now - ESPLastMonsterUpdate) >= 0.25 then
+                if ESPState.Monster.Enabled and (now - ESPLastMonsterUpdate) >= ESP_MONSTER_UPDATE_RATE then
                     updateMonsterESP()
                     ESPLastMonsterUpdate = now
                 elseif not ESPState.Monster.Enabled then
@@ -1440,7 +1557,7 @@ local function refreshESPConnection()
                     MonsterTargets = {}
                 end
 
-                if ESPState.Chest.Enabled and (now - ESPLastChestUpdate) >= 0.5 then
+                if ESPState.Chest.Enabled and (now - ESPLastChestUpdate) >= ESP_CHEST_UPDATE_RATE then
                     updateChestESP()
                     ESPLastChestUpdate = now
                 elseif not ESPState.Chest.Enabled then
@@ -1448,7 +1565,7 @@ local function refreshESPConnection()
                     ChestTargets = {}
                 end
 
-                task.wait(0.1)
+                task.wait(0.05)
             end
         end)
     else
@@ -2363,6 +2480,7 @@ local function CreateMainTab(self)
             AimState.Enabled = state
             if not state then
                 AimState.Holding = false
+                AimCurrentTarget = nil
             end
             refreshAimLoop()
         end,
@@ -2386,6 +2504,7 @@ local function CreateMainTab(self)
         Callback = function(value)
             AimState.TargetType = value
             AimMonsterRefreshAt = 0
+            AimCurrentTarget = nil
             if value == "Monster" then
                 resetSharedMonsterTargets()
             end
@@ -2398,6 +2517,77 @@ local function CreateMainTab(self)
         Default = "Head",
         Callback = function(value)
             AimState.TargetPart = value
+        end,
+    })
+
+    SectionAim:Toggle({
+        Title = "Smoothing",
+        Desc = "Smooth camera movement",
+        Icon = "waves",
+        Value = true,
+        Callback = function(state)
+            AimState.Smoothing = state
+        end,
+    })
+
+    SectionAim:Slider({
+        Title = "Smooth Speed",
+        Desc = "Higher = faster aim",
+        Value = {
+            Min = 0.05,
+            Max = 1,
+            Default = 0.18,
+        },
+        Step = 0.01,
+        Callback = function(value)
+            AimState.SmoothingFactor = value
+        end,
+    })
+
+    SectionAim:Toggle({
+        Title = "Prediction",
+        Desc = "Predict target movement",
+        Icon = "crosshair",
+        Value = true,
+        Callback = function(state)
+            AimState.Prediction = state
+        end,
+    })
+
+    SectionAim:Slider({
+        Title = "Prediction Strength",
+        Desc = "Prediction time multiplier",
+        Value = {
+            Min = 0.05,
+            Max = 0.5,
+            Default = 0.12,
+        },
+        Step = 0.01,
+        Callback = function(value)
+            AimState.PredictionStrength = value
+        end,
+    })
+
+    SectionAim:Toggle({
+        Title = "Sticky Target",
+        Desc = "Keep locked on same target",
+        Icon = "link",
+        Value = true,
+        Callback = function(state)
+            AimState.StickyTarget = state
+            if not state then
+                AimCurrentTarget = nil
+            end
+        end,
+    })
+
+    SectionAim:Toggle({
+        Title = "Visibility Check",
+        Desc = "Only aim at visible targets",
+        Icon = "eye",
+        Value = true,
+        Callback = function(state)
+            AimState.VisibilityCheck = state
         end,
     })
 
@@ -2487,6 +2677,34 @@ local function CreateMainTab(self)
                 clearTableValues(ChestInfoCache)
             end
             refreshESPConnection()
+        end,
+    })
+
+    SectionESP:Slider({
+        Title = "Max Distance",
+        Desc = "ESP render distance (studs)",
+        Value = {
+            Min = 500,
+            Max = 5000,
+            Default = 2500,
+        },
+        Step = 100,
+        Callback = function(value)
+            ESP_MAX_DISTANCE_STUDS = value
+        end,
+    })
+
+    SectionESP:Slider({
+        Title = "Max Visible",
+        Desc = "Max items to show per type",
+        Value = {
+            Min = 10,
+            Max = 100,
+            Default = 50,
+        },
+        Step = 5,
+        Callback = function(value)
+            ESP_MAX_VISIBLE_ITEMS = value
         end,
     })
 
