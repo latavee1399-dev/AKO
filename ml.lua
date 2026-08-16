@@ -318,17 +318,21 @@ end
 assert(#pickupRarityOptions == 10 and pickupValueByOption["1M"] == 1000000 and pickupValueByOption["10000000M"] == 10000000000000, "Auto Pick Item filter setup failed")
 
 local function triggerDropPickup(drop)
-    local root = drop.PrimaryPart or drop:FindFirstChild("Root")
-    local prompt = root and root:FindFirstChild("PickupPrompt")
-    if not prompt or not prompt:IsA("ProximityPrompt") then return false end
+    if not drop or not drop:IsA("Model") or drop.Name == "" then return false end
 
-    if type(fireproximityprompt) == "function" then
-        return pcall(fireproximityprompt, prompt)
+    local remoteFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Msg")
+    local remoteEventFolder = remoteFolder and remoteFolder:FindFirstChild("RemoteEvent")
+    local remote = remoteEventFolder and remoteEventFolder:FindFirstChild("NetWorkRemoteEvent")
+    if not remote or not remote:IsA("RemoteEvent") then return false end
+
+    local ok, netMsg = pcall(require, game.ReplicatedFirst.AllSideCode.ToolBasic.NetMsg)
+    if not ok or type(netMsg) ~= "table" or type(netMsg.DROP_PICKUP) ~= "string" then
+        return false
     end
-    if type(firesignal) == "function" then
-        return pcall(firesignal, prompt.Triggered, game:GetService("Players").LocalPlayer)
-    end
-    return false
+
+    return pcall(function()
+        remote:FireServer(netMsg.DROP_PICKUP, drop.Name)
+    end)
 end
 
 local function pickEligibleDrops()
@@ -340,7 +344,7 @@ local function pickEligibleDrops()
         local folderRarity = tonumber(rarityFolder.Name)
         if folderRarity and selectedPickupRarities[folderRarity] then
             for _, drop in next, rarityFolder:GetChildren() do
-                if drop:IsA("Model") and drop.Name == "DropItem" and drop:GetAttribute("DropLanded") == true then
+                if drop:IsA("Model") and drop:GetAttribute("DropLanded") == true then
                     local rarity = math.floor(tonumber(drop:GetAttribute("Xyd")) or folderRarity)
                     local goldValue = math.floor(tonumber(drop:GetAttribute("GoldValue")) or 0)
                     local lastAttempt = pickupAttemptTimes[drop] or 0
@@ -1299,31 +1303,31 @@ local EventTab = Window:Tab({
     Icon = "calendar-days"
 })
 
--- Event Dino Treasures Section
-local EventDinoTreasuresSection = EventTab:Section({
-    Title = "Event Dino Treasures",
-    Icon = "gem",
+-- Event Light vs Dark Section
+local EventLightVsDarkSection = EventTab:Section({
+    Title = "Event Light vs Dark",
+    Icon = "sun-moon",
     Opened = false
 })
 
--- Dino Treasures Event
-local eventDinoUtilsSystem = require(game.ReplicatedFirst.AllSideCode.UtilsSystem)
-local autoBuyEventShopEnabled = false
-local autoBuyEventShopLoopRunning = false
-local selectedEventShopId = nil
-local autoClaimEventQuestsEnabled = false
-local autoClaimEventQuestsLoopRunning = false
-local autoEventRollEnabled = false
-local autoEventRollLoopRunning = false
-local eventShopOptions = {}
-local eventShopIdByOption = {}
-local eventTaskResetTypes = {
-    eventDinoUtilsSystem.EnumMgr.TaskResetType.Timed,
-    eventDinoUtilsSystem.EnumMgr.TaskResetType.Daily,
-    eventDinoUtilsSystem.EnumMgr.TaskResetType.Once
+-- Light vs Dark Event
+local eventLightDarkUtilsSystem = require(game.ReplicatedFirst.AllSideCode.UtilsSystem)
+local autoBuyLightDarkShopEnabled = false
+local autoBuyLightDarkShopLoopRunning = false
+local autoLightDarkRollEnabled = false
+local autoLightDarkRollLoopRunning = false
+local autoClaimLightDarkQuestsEnabled = false
+local autoClaimLightDarkQuestsLoopRunning = false
+local selectedLightDarkShopIds = {}
+local lightDarkShopOptions = {}
+local lightDarkShopIdByOption = {}
+local lightDarkTaskResetTypes = {
+    eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Timed,
+    eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Daily,
+    eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Once
 }
 
-local function createDinoEventControl(name, callback)
+local function createLightDarkEventControl(name, callback)
     local success, control = pcall(callback)
     if not success then
         warn("[Magic Loot] Failed to create " .. name .. ": " .. tostring(control))
@@ -1332,29 +1336,27 @@ local function createDinoEventControl(name, callback)
     return control
 end
 
-for _, shopRow in next, eventDinoUtilsSystem.CfgFind.GetEventShopList() do
+for _, shopRow in next, eventLightDarkUtilsSystem.CfgFind.GetEventShopList() do
     local shopId = math.floor(tonumber(shopRow.id) or 0)
     local itemId = tonumber(shopRow.ItemId)
-    local itemConfig = itemId and eventDinoUtilsSystem.CfgFind.FindCfgByID(itemId)
+    local itemConfig = itemId and eventLightDarkUtilsSystem.CfgFind.FindCfgByID(itemId)
     if shopId > 0 and itemConfig then
         local itemName = itemConfig.ZhName or itemConfig.Name or ("Item " .. itemId)
-        local translatedName = eventDinoUtilsSystem.TranslationHelper.TranslateByKey(itemName) or itemName
+        local translatedName = eventLightDarkUtilsSystem.TranslationHelper.TranslateByKey(itemName) or itemName
         local price = math.max(0, math.floor(tonumber(shopRow.price) or 0))
-        local option = string.format("%s - %d Tokens (Shop %d)", translatedName, price, shopId)
-        eventShopOptions[#eventShopOptions + 1] = option
-        eventShopIdByOption[option] = shopId
+        local stock = eventLightDarkUtilsSystem.CfgFind.ParseEventShopStock(shopRow)
+        local option = string.format("%s - %d Tokens (Stock %d)", translatedName, price, stock)
+        lightDarkShopOptions[#lightDarkShopOptions + 1] = option
+        lightDarkShopIdByOption[option] = shopId
     end
 end
 
-table.sort(eventShopOptions, function(left, right)
-    return (eventShopIdByOption[left] or 0) < (eventShopIdByOption[right] or 0)
+table.sort(lightDarkShopOptions, function(left, right)
+    return (lightDarkShopIdByOption[left] or 0) < (lightDarkShopIdByOption[right] or 0)
 end)
-selectedEventShopId = eventShopIdByOption[eventShopOptions[1]]
 
-assert(#eventShopOptions > 0 and selectedEventShopId, "Dino Event shop setup failed")
-
-local function getEventShopRow(shopId)
-    for _, shopRow in next, eventDinoUtilsSystem.CfgFind.GetEventShopList() do
+local function getLightDarkShopRow(shopId)
+    for _, shopRow in next, eventLightDarkUtilsSystem.CfgFind.GetEventShopList() do
         if math.floor(tonumber(shopRow.id) or 0) == shopId then
             return shopRow
         end
@@ -1362,44 +1364,80 @@ local function getEventShopRow(shopId)
     return nil
 end
 
-local function getEventShopRemain(shopId, shopRow)
-    local eventData = eventDinoUtilsSystem.PlayerData.GetPlrDataByKey(eventDinoUtilsSystem.LocalPlayer, "Event")
+local function getLightDarkShopRemain(shopId, shopRow)
+    local eventData = eventLightDarkUtilsSystem.PlayerData.GetPlrDataByKey(
+        eventLightDarkUtilsSystem.LocalPlayer,
+        "Event"
+    )
     local bought = type(eventData) == "table"
         and type(eventData.Shop) == "table"
         and tonumber(eventData.Shop[tostring(shopId)])
         or 0
-    local stock = eventDinoUtilsSystem.CfgFind.ParseEventShopStock(shopRow)
-    return eventDinoUtilsSystem.CfgFind.GetEventShopRemain(bought or 0, stock)
+    local stock = eventLightDarkUtilsSystem.CfgFind.ParseEventShopStock(shopRow)
+    return eventLightDarkUtilsSystem.CfgFind.GetEventShopRemain(bought or 0, stock)
 end
 
-local function buySelectedEventShopItem()
-    if not selectedEventShopId or not eventDinoUtilsSystem.CfgFind.IsEventActive() then return false end
-    local shopRow = getEventShopRow(selectedEventShopId)
-    if not shopRow or getEventShopRemain(selectedEventShopId, shopRow) <= 0 then return false end
+local function buySelectedLightDarkShopItems()
+    if not eventLightDarkUtilsSystem.CfgFind.IsEventActive() then return false end
 
-    local currencyId = eventDinoUtilsSystem.CfgFind.GetEventCurrencyItemId()
-    local currency = currencyId and eventDinoUtilsSystem.GetData.GetItemCountByIDOnClient(currencyId) or 0
-    local price = math.max(0, math.floor(tonumber(shopRow.price) or 0))
-    if not currencyId or currency < price then return false end
+    local currencyId = eventLightDarkUtilsSystem.CfgFind.GetEventCurrencyItemId()
+    local currency = currencyId
+        and eventLightDarkUtilsSystem.GetData.GetItemCountByIDOnClient(currencyId)
+        or 0
+    local boughtAny = false
+
+    for shopId, selected in next, selectedLightDarkShopIds do
+        if selected then
+            local shopRow = getLightDarkShopRow(shopId)
+            local price = shopRow and math.max(0, math.floor(tonumber(shopRow.price) or 0)) or 0
+            if shopRow and getLightDarkShopRemain(shopId, shopRow) > 0 and currency >= price then
+                local success, result = pcall(function()
+                    return eventLightDarkUtilsSystem.NetWork.InvokeServer(
+                        eventLightDarkUtilsSystem.NetMsg.EVENT_SHOP_BUY,
+                        shopId
+                    )
+                end)
+                if success and result == true then
+                    boughtAny = true
+                    currency = currency - price
+                end
+            end
+        end
+    end
+
+    return boughtAny
+end
+
+local function rollLightDarkEventTicket()
+    if not eventLightDarkUtilsSystem.CfgFind.IsEventActive() then return false end
+    local ticketId = eventLightDarkUtilsSystem.CfgFind.GetEventTicketItemId()
+    local ticketCount = ticketId
+        and eventLightDarkUtilsSystem.GetData.GetItemCountByIDOnClient(ticketId)
+        or 0
+    if ticketCount <= 0 then return false end
 
     local success, result = pcall(function()
-        return eventDinoUtilsSystem.NetWork.InvokeServer(
-            eventDinoUtilsSystem.NetMsg.EVENT_SHOP_BUY,
-            selectedEventShopId
+        return eventLightDarkUtilsSystem.NetWork.InvokeServer(
+            eventLightDarkUtilsSystem.NetMsg.EVENT_HATCH_DRAW,
+            "ticket"
         )
     end)
-    return success and result == true
+    return success and type(result) == "table"
+        and type(result.itemIds) == "table"
+        and #result.itemIds > 0
 end
 
-local function getActiveEventTaskTags(resetType, eventTask)
+local function getActiveLightDarkTaskTags(resetType, eventTask)
     local onceState = type(eventTask.Once) == "table" and eventTask.Once or {}
     local completedOnce = type(onceState.Completed) == "table" and onceState.Completed or {}
-    local gameConfig = eventDinoUtilsSystem.CfgFind.GetEventGameConfig()
+    local gameConfig = eventLightDarkUtilsSystem.CfgFind.GetEventGameConfig()
     local onceRefill = gameConfig.OnceTaskRefill == true
     local maxTasks = math.max(1, math.floor(tonumber(gameConfig.MaxTasksPerResetType) or 3))
-    local onceType = eventDinoUtilsSystem.EnumMgr.TaskResetType.Once
+    local onceType = eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Once
 
-    if resetType == onceType and not onceRefill and type(onceState.Accepted) == "table" and #onceState.Accepted > 0 then
+    if resetType == onceType and not onceRefill
+        and type(onceState.Accepted) == "table" and #onceState.Accepted > 0
+    then
         local accepted = {}
         for _, onlyTag in next, onceState.Accepted do
             onlyTag = tostring(onlyTag or "")
@@ -1409,7 +1447,7 @@ local function getActiveEventTaskTags(resetType, eventTask)
     end
 
     local tags = {}
-    for _, taskConfig in next, eventDinoUtilsSystem.CfgFind.GetTaskListByResetType(resetType) do
+    for _, taskConfig in next, eventLightDarkUtilsSystem.CfgFind.GetTaskListByResetType(resetType) do
         local onlyTag = tostring(taskConfig.onlyTag or "")
         if onlyTag ~= "" and (resetType ~= onceType or tonumber(completedOnce[onlyTag]) ~= 1) then
             tags[#tags + 1] = onlyTag
@@ -1419,27 +1457,32 @@ local function getActiveEventTaskTags(resetType, eventTask)
     return tags
 end
 
-local function getClaimableEventQuestTags()
-    local eventData = eventDinoUtilsSystem.PlayerData.GetPlrDataByKey(eventDinoUtilsSystem.LocalPlayer, "Event")
+local function getClaimableLightDarkQuestTags()
+    local eventData = eventLightDarkUtilsSystem.PlayerData.GetPlrDataByKey(
+        eventLightDarkUtilsSystem.LocalPlayer,
+        "Event"
+    )
     local eventTask = type(eventData) == "table" and eventData.EventTask or nil
     local claimableTags = {}
-    if not eventDinoUtilsSystem.CfgFind.IsEventActive() or type(eventTask) ~= "table" then
+    if not eventLightDarkUtilsSystem.CfgFind.IsEventActive() or type(eventTask) ~= "table" then
         return claimableTags
     end
 
     local resetTypeKeys = {
-        [eventDinoUtilsSystem.EnumMgr.TaskResetType.Timed] = "Timed",
-        [eventDinoUtilsSystem.EnumMgr.TaskResetType.Daily] = "Daily",
-        [eventDinoUtilsSystem.EnumMgr.TaskResetType.Once] = "Once"
+        [eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Timed] = "Timed",
+        [eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Daily] = "Daily",
+        [eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Once] = "Once"
     }
 
-    for _, resetType in next, eventTaskResetTypes do
-        local state = type(eventTask[resetTypeKeys[resetType]]) == "table" and eventTask[resetTypeKeys[resetType]] or {}
+    for _, resetType in next, lightDarkTaskResetTypes do
+        local state = type(eventTask[resetTypeKeys[resetType]]) == "table"
+            and eventTask[resetTypeKeys[resetType]]
+            or {}
         local progress = type(state.Progress) == "table" and state.Progress or {}
         local completed = type(state.Completed) == "table" and state.Completed or {}
 
-        for _, onlyTag in next, getActiveEventTaskTags(resetType, eventTask) do
-            local taskConfig = eventDinoUtilsSystem.CfgFind.GetTaskCfgByOnlyTag(onlyTag)
+        for _, onlyTag in next, getActiveLightDarkTaskTags(resetType, eventTask) do
+            local taskConfig = eventLightDarkUtilsSystem.CfgFind.GetTaskCfgByOnlyTag(onlyTag)
             if taskConfig then
                 local need = type(taskConfig.need) == "table" and taskConfig.need[1] or taskConfig.need
                 need = math.max(1, math.floor(tonumber(need) or 1))
@@ -1454,113 +1497,103 @@ local function getClaimableEventQuestTags()
     return claimableTags
 end
 
-local function claimEventQuest(onlyTag)
+local function claimLightDarkQuest(onlyTag)
     local success, result = pcall(function()
-        return eventDinoUtilsSystem.NetWork.InvokeServer(
-            eventDinoUtilsSystem.NetMsg.EVENT_TASK_CLAIM,
+        return eventLightDarkUtilsSystem.NetWork.InvokeServer(
+            eventLightDarkUtilsSystem.NetMsg.EVENT_TASK_CLAIM,
             onlyTag
         )
     end)
     return success and result == true
 end
 
-local function rollDinoEventTicket()
-    if not eventDinoUtilsSystem.CfgFind.IsEventActive() then return false end
-    local ticketId = eventDinoUtilsSystem.EnumMgr.ItemID.EventTicket
-    local ticketCount = eventDinoUtilsSystem.GetData.GetItemCountByIDOnClient(ticketId) or 0
-    if ticketCount <= 0 then return false end
-
-    local success, result = pcall(function()
-        return eventDinoUtilsSystem.NetWork.InvokeServer(
-            eventDinoUtilsSystem.NetMsg.EVENT_HATCH_DRAW,
-            "ticket"
-        )
-    end)
-    return success and type(result) == "table"
-        and type(result.itemIds) == "table"
-        and #result.itemIds > 0
-end
-
-createDinoEventControl("Event Shop Item Dropdown", function()
-    return EventDinoTreasuresSection:Dropdown({
-        Title = "Event Shop Item",
-        Description = "Select the item to buy with Event Tokens",
-        Values = eventShopOptions,
-        Value = eventShopOptions[1],
+createLightDarkEventControl("Light Dark Shop Dropdown", function()
+    return EventLightVsDarkSection:Dropdown({
+        Title = "Event Shop Items",
+        Description = "Select one or more items to buy automatically",
+        Values = lightDarkShopOptions,
+        Value = {},
+        Multi = true,
+        AllowNone = true,
         SearchBarEnabled = true,
-        Callback = function(value)
-            selectedEventShopId = eventShopIdByOption[value]
+        Callback = function(values)
+            selectedLightDarkShopIds = {}
+            if type(values) ~= "table" then return end
+            for _, option in next, values do
+                local shopId = lightDarkShopIdByOption[option]
+                if shopId then selectedLightDarkShopIds[shopId] = true end
+            end
         end
     })
 end)
 
-createDinoEventControl("Auto Buy Event Shop Toggle", function()
-    return EventDinoTreasuresSection:Toggle({
+createLightDarkEventControl("Auto Buy Light Dark Shop Toggle", function()
+    return EventLightVsDarkSection:Toggle({
         Title = "Auto Buy Event Shop",
-        Desc = "Automatically buy the selected item while currency and stock remain",
+        Desc = "Automatically buy selected items while stock and tokens remain",
         Icon = "shopping-cart",
         Value = false,
         Callback = function(state)
-            autoBuyEventShopEnabled = state
-            if not state or autoBuyEventShopLoopRunning then return end
+            autoBuyLightDarkShopEnabled = state
+            if not state or autoBuyLightDarkShopLoopRunning then return end
 
-            autoBuyEventShopLoopRunning = true
+            autoBuyLightDarkShopLoopRunning = true
             task.spawn(function()
-                while autoBuyEventShopEnabled do
-                    task.wait(buySelectedEventShopItem() and 0.75 or 2)
+                while autoBuyLightDarkShopEnabled do
+                    task.wait(buySelectedLightDarkShopItems() and 0.75 or 2)
                 end
-                autoBuyEventShopLoopRunning = false
+                autoBuyLightDarkShopLoopRunning = false
             end)
         end
     })
 end)
 
-createDinoEventControl("Auto Claim Event Quests Toggle", function()
-    return EventDinoTreasuresSection:Toggle({
-        Title = "Auto Claim Quests Event",
-        Desc = "Automatically claim completed Dino Event quests",
+createLightDarkEventControl("Auto Light Dark Roll Toggle", function()
+    return EventLightVsDarkSection:Toggle({
+        Title = "Auto Roll",
+        Desc = "Automatically roll using event tickets only",
+        Icon = "dices",
+        Value = false,
+        Callback = function(state)
+            autoLightDarkRollEnabled = state
+            if not state or autoLightDarkRollLoopRunning then return end
+
+            autoLightDarkRollLoopRunning = true
+            task.spawn(function()
+                while autoLightDarkRollEnabled do
+                    task.wait(rollLightDarkEventTicket() and 0.75 or 2)
+                end
+                autoLightDarkRollLoopRunning = false
+            end)
+        end
+    })
+end)
+
+createLightDarkEventControl("Auto Claim Light Dark Quests Toggle", function()
+    return EventLightVsDarkSection:Toggle({
+        Title = "Auto Claim Quests",
+        Desc = "Automatically claim completed event quests",
         Icon = "list-checks",
         Value = false,
         Callback = function(state)
-            autoClaimEventQuestsEnabled = state
-            if not state or autoClaimEventQuestsLoopRunning then return end
+            autoClaimLightDarkQuestsEnabled = state
+            if not state or autoClaimLightDarkQuestsLoopRunning then return end
 
-            autoClaimEventQuestsLoopRunning = true
+            autoClaimLightDarkQuestsLoopRunning = true
             task.spawn(function()
-                while autoClaimEventQuestsEnabled do
-                    local claimableTags = getClaimableEventQuestTags()
+                while autoClaimLightDarkQuestsEnabled do
+                    local claimableTags = getClaimableLightDarkQuestTags()
                     local claimedAny = false
 
                     for _, onlyTag in next, claimableTags do
-                        if not autoClaimEventQuestsEnabled then break end
-                        if claimEventQuest(onlyTag) then claimedAny = true end
+                        if not autoClaimLightDarkQuestsEnabled then break end
+                        if claimLightDarkQuest(onlyTag) then claimedAny = true end
                         task.wait(0.75)
                     end
 
                     task.wait(claimedAny and 1 or 2)
                 end
-                autoClaimEventQuestsLoopRunning = false
-            end)
-        end
-    })
-end)
-
-createDinoEventControl("Auto Dino Event Roll Toggle", function()
-    return EventDinoTreasuresSection:Toggle({
-        Title = "Auto Roll",
-        Desc = "Automatically roll with Event Tickets only; never uses Robux",
-        Icon = "dices",
-        Value = false,
-        Callback = function(state)
-            autoEventRollEnabled = state
-            if not state or autoEventRollLoopRunning then return end
-
-            autoEventRollLoopRunning = true
-            task.spawn(function()
-                while autoEventRollEnabled do
-                    task.wait(rollDinoEventTicket() and 0.75 or 2)
-                end
-                autoEventRollLoopRunning = false
+                autoClaimLightDarkQuestsLoopRunning = false
             end)
         end
     })
@@ -1907,7 +1940,7 @@ task.defer(function()
     AutoAlchemySection:Close()
     AutoSellSection:Close()
     AutoBuySection:Close()
-    EventDinoTreasuresSection:Close()
+    EventLightVsDarkSection:Close()
     AutoGiftSection:Close()
 end)
 
