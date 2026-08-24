@@ -545,6 +545,244 @@ local AutoGameSection = AutoTab:Section({
     Opened = false
 })
 
+-- Auto Pick Dragon Nest drops
+local autoPickDragonNestEnabled = false
+local autoPickDragonNestLoopRunning = false
+local dragonNestPickupAttemptTimes = setmetatable({}, { __mode = "k" })
+local dragonNestMatchKeywords = { "dragon", "nest", "dragon_nest", "dragon-nest" }
+
+local function containsDragonNestKeyword(value)
+    local text = string.lower(tostring(value or ""))
+    for _, keyword in next, dragonNestMatchKeywords do
+        if string.find(text, keyword, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function isDragonNestDrop(drop, dropsClient)
+    if not drop:IsA("Model") or drop.Name == "" or drop:GetAttribute("DropLanded") ~= true then
+        return false
+    end
+
+    -- Check the model name, metadata, and its container path. This covers
+    -- event drops whose display name differs from their internal item name.
+    if containsDragonNestKeyword(drop.Name) then return true end
+    for attributeName, attributeValue in next, drop:GetAttributes() do
+        if containsDragonNestKeyword(attributeName) or containsDragonNestKeyword(attributeValue) then
+            return true
+        end
+    end
+
+    local parent = drop.Parent
+    while parent and parent ~= dropsClient do
+        if containsDragonNestKeyword(parent.Name) then return true end
+        parent = parent.Parent
+    end
+    return false
+end
+
+local function pickDragonNestDrops()
+    local dropsClient = workspace:FindFirstChild("DropsClient")
+    if not dropsClient then return false end
+
+    local now = os.clock()
+    local attempted = false
+    local function visit(container)
+        local children = container:GetChildren()
+        for _, child in next, children do
+            if isDragonNestDrop(child, dropsClient) then
+                local lastAttempt = dragonNestPickupAttemptTimes[child] or 0
+                if now - lastAttempt >= 1 then
+                    dragonNestPickupAttemptTimes[child] = now
+                    attempted = triggerDropPickup(child) or attempted
+                end
+            end
+            if #child:GetChildren() > 0 then
+                visit(child)
+            end
+        end
+    end
+
+    visit(dropsClient)
+    return attempted
+end
+
+AutoGameSection:Toggle({
+    Title = "Auto Pick Dragon Nest",
+    Desc = "Automatically collect Dragon Nest ores, rocks, and item drops on the ground",
+    Icon = "gem",
+    Value = false,
+    Callback = function(state)
+        autoPickDragonNestEnabled = state
+        if not state or autoPickDragonNestLoopRunning then return end
+
+        autoPickDragonNestLoopRunning = true
+        task.spawn(function()
+            while autoPickDragonNestEnabled do
+                pickDragonNestDrops()
+                task.wait(0.25)
+            end
+            autoPickDragonNestLoopRunning = false
+        end)
+    end
+})
+
+-- Auto Pick Light Altar drops
+local autoPickLightAltarEnabled = false
+local autoPickLightAltarLoopRunning = false
+local lightAltarPickupAttemptTimes = setmetatable({}, { __mode = "k" })
+local lightAltarMatchKeywords = { "light altar", "light_altar", "light-altar", "lightaltar", "ligth altar", "altar" }
+
+local function containsLightAltarKeyword(value)
+    local text = string.lower(tostring(value or ""))
+    for _, keyword in next, lightAltarMatchKeywords do
+        if string.find(text, keyword, 1, true) then return true end
+    end
+    return false
+end
+
+local function isLightAltarDrop(drop, dropsClient)
+    if not drop:IsA("Model") or drop.Name == "" or drop:GetAttribute("DropLanded") ~= true then
+        return false
+    end
+
+    if containsLightAltarKeyword(drop.Name) then return true end
+    for attributeName, attributeValue in next, drop:GetAttributes() do
+        if containsLightAltarKeyword(attributeName) or containsLightAltarKeyword(attributeValue) then
+            return true
+        end
+    end
+
+    local parent = drop.Parent
+    while parent and parent ~= dropsClient do
+        if containsLightAltarKeyword(parent.Name) then return true end
+        parent = parent.Parent
+    end
+    return false
+end
+
+local function pickLightAltarDrops()
+    local dropsClient = workspace:FindFirstChild("DropsClient")
+    if not dropsClient then return false end
+
+    local now = os.clock()
+    local attempted = false
+    local function visit(container)
+        for _, child in next, container:GetChildren() do
+            if isLightAltarDrop(child, dropsClient) then
+                local lastAttempt = lightAltarPickupAttemptTimes[child] or 0
+                if now - lastAttempt >= 1 then
+                    lightAltarPickupAttemptTimes[child] = now
+                    attempted = triggerDropPickup(child) or attempted
+                end
+            end
+            if #child:GetChildren() > 0 then visit(child) end
+        end
+    end
+
+    visit(dropsClient)
+    return attempted
+end
+
+AutoGameSection:Toggle({
+    Title = "Auto Pick Light Altar",
+    Desc = "Automatically collect Light Altar ores, rocks, and item drops on the ground",
+    Icon = "sun",
+    Value = false,
+    Callback = function(state)
+        autoPickLightAltarEnabled = state
+        if not state or autoPickLightAltarLoopRunning then return end
+
+        autoPickLightAltarLoopRunning = true
+        task.spawn(function()
+            while autoPickLightAltarEnabled do
+                pickLightAltarDrops()
+                task.wait(0.25)
+            end
+            autoPickLightAltarLoopRunning = false
+        end)
+    end
+})
+
+-- Auto Pick Dark Altar drops
+local autoPickDarkAltarEnabled = false
+local autoPickDarkAltarLoopRunning = false
+local darkAltarPickupAttemptTimes = setmetatable({}, { __mode = "k" })
+local darkAltarMatchKeywords = { "dark altar", "dark_altar", "dark-altar", "darkaltar", "altar" }
+
+local function containsDarkAltarKeyword(value)
+    local text = string.lower(tostring(value or ""))
+    for _, keyword in next, darkAltarMatchKeywords do
+        if string.find(text, keyword, 1, true) then return true end
+    end
+    return false
+end
+
+local function isDarkAltarDrop(drop, dropsClient)
+    if not drop:IsA("Model") or drop.Name == "" or drop:GetAttribute("DropLanded") ~= true then
+        return false
+    end
+
+    if containsDarkAltarKeyword(drop.Name) then return true end
+    for attributeName, attributeValue in next, drop:GetAttributes() do
+        if containsDarkAltarKeyword(attributeName) or containsDarkAltarKeyword(attributeValue) then
+            return true
+        end
+    end
+
+    local parent = drop.Parent
+    while parent and parent ~= dropsClient do
+        if containsDarkAltarKeyword(parent.Name) then return true end
+        parent = parent.Parent
+    end
+    return false
+end
+
+local function pickDarkAltarDrops()
+    local dropsClient = workspace:FindFirstChild("DropsClient")
+    if not dropsClient then return false end
+
+    local now = os.clock()
+    local attempted = false
+    local function visit(container)
+        for _, child in next, container:GetChildren() do
+            if isDarkAltarDrop(child, dropsClient) then
+                local lastAttempt = darkAltarPickupAttemptTimes[child] or 0
+                if now - lastAttempt >= 1 then
+                    darkAltarPickupAttemptTimes[child] = now
+                    attempted = triggerDropPickup(child) or attempted
+                end
+            end
+            if #child:GetChildren() > 0 then visit(child) end
+        end
+    end
+
+    visit(dropsClient)
+    return attempted
+end
+
+AutoGameSection:Toggle({
+    Title = "Auto Pick Dark Altar",
+    Desc = "Automatically collect Dark Altar ores, rocks, and item drops on the ground",
+    Icon = "moon",
+    Value = false,
+    Callback = function(state)
+        autoPickDarkAltarEnabled = state
+        if not state or autoPickDarkAltarLoopRunning then return end
+
+        autoPickDarkAltarLoopRunning = true
+        task.spawn(function()
+            while autoPickDarkAltarEnabled do
+                pickDarkAltarDrops()
+                task.wait(0.25)
+            end
+            autoPickDarkAltarLoopRunning = false
+        end)
+    end
+})
+
 -- Auto Rebirth
 local autoRebirthEnabled = false
 local autoRebirthLoopRunning = false
@@ -1304,301 +1542,210 @@ local EventTab = Window:Tab({
     Icon = "calendar-days"
 })
 
--- Event Light vs Dark Section
-local EventLightVsDarkSection = EventTab:Section({
-    Title = "Event Light vs Dark",
-    Icon = "sun-moon",
+-- Dragon Invasion Event
+local DragonInvasionSection = EventTab:Section({
+    Title = "Dragon Invasion",
+    Icon = "flame",
     Opened = false
 })
 
--- Light vs Dark Event
-local eventLightDarkUtilsSystem = require(game.ReplicatedFirst.AllSideCode.UtilsSystem)
-local autoBuyLightDarkShopEnabled = false
-local autoBuyLightDarkShopLoopRunning = false
-local autoLightDarkRollEnabled = false
-local autoLightDarkRollLoopRunning = false
-local autoClaimLightDarkQuestsEnabled = false
-local autoClaimLightDarkQuestsLoopRunning = false
-local selectedLightDarkShopIds = {}
-local lightDarkShopOptions = {}
-local lightDarkShopIdByOption = {}
-local lightDarkTaskResetTypes = {
-    eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Timed,
-    eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Daily,
-    eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Once
-}
+local eventUtilsSystem = require(game.ReplicatedFirst.AllSideCode.UtilsSystem)
+local autoBuyDragonInvasionEnabled = false
+local autoBuyDragonInvasionLoopRunning = false
+local autoDragonInvasionRollEnabled = false
+local autoDragonInvasionRollLoopRunning = false
+local autoClaimDragonInvasionQuestEnabled = false
+local autoClaimDragonInvasionQuestLoopRunning = false
+local selectedDragonInvasionShopIds = {}
+local dragonInvasionShopOptions = {}
+local dragonInvasionShopIdByOption = {}
 
-local function createLightDarkEventControl(name, callback)
-    local success, control = pcall(callback)
-    if not success then
-        warn("[Magic Loot] Failed to create " .. name .. ": " .. tostring(control))
-        return nil
-    end
-    return control
-end
-
-for _, shopRow in next, eventLightDarkUtilsSystem.CfgFind.GetEventShopList() do
+for _, shopRow in next, eventUtilsSystem.CfgFind.GetEventShopList() do
     local shopId = math.floor(tonumber(shopRow.id) or 0)
     local itemId = tonumber(shopRow.ItemId)
-    local itemConfig = itemId and eventLightDarkUtilsSystem.CfgFind.FindCfgByID(itemId)
+    local itemConfig = itemId and eventUtilsSystem.CfgFind.FindCfgByID(itemId)
     if shopId > 0 and itemConfig then
         local itemName = itemConfig.ZhName or itemConfig.Name or ("Item " .. itemId)
-        local translatedName = eventLightDarkUtilsSystem.TranslationHelper.TranslateByKey(itemName) or itemName
+        local translatedName = eventUtilsSystem.TranslationHelper.TranslateByKey(itemName) or itemName
         local price = math.max(0, math.floor(tonumber(shopRow.price) or 0))
-        local stock = eventLightDarkUtilsSystem.CfgFind.ParseEventShopStock(shopRow)
+        local stock = eventUtilsSystem.CfgFind.ParseEventShopStock(shopRow)
         local option = string.format("%s - %d Tokens (Stock %d)", translatedName, price, stock)
-        lightDarkShopOptions[#lightDarkShopOptions + 1] = option
-        lightDarkShopIdByOption[option] = shopId
+        dragonInvasionShopOptions[#dragonInvasionShopOptions + 1] = option
+        dragonInvasionShopIdByOption[option] = shopId
     end
 end
 
-table.sort(lightDarkShopOptions, function(left, right)
-    return (lightDarkShopIdByOption[left] or 0) < (lightDarkShopIdByOption[right] or 0)
+table.sort(dragonInvasionShopOptions, function(left, right)
+    return (dragonInvasionShopIdByOption[left] or 0) < (dragonInvasionShopIdByOption[right] or 0)
 end)
 
-local function getLightDarkShopRow(shopId)
-    for _, shopRow in next, eventLightDarkUtilsSystem.CfgFind.GetEventShopList() do
-        if math.floor(tonumber(shopRow.id) or 0) == shopId then
-            return shopRow
-        end
+local function getDragonInvasionShopRow(shopId)
+    for _, shopRow in next, eventUtilsSystem.CfgFind.GetEventShopList() do
+        if math.floor(tonumber(shopRow.id) or 0) == shopId then return shopRow end
     end
     return nil
 end
 
-local function getLightDarkShopRemain(shopId, shopRow)
-    local eventData = eventLightDarkUtilsSystem.PlayerData.GetPlrDataByKey(
-        eventLightDarkUtilsSystem.LocalPlayer,
-        "Event"
+local function getDragonInvasionShopRemain(shopId, shopRow)
+    local eventData = eventUtilsSystem.PlayerData.GetPlrDataByKey(eventUtilsSystem.LocalPlayer, "Event")
+    local bought = type(eventData) == "table" and type(eventData.Shop) == "table"
+        and tonumber(eventData.Shop[tostring(shopId)]) or 0
+    return eventUtilsSystem.CfgFind.GetEventShopRemain(
+        bought or 0,
+        eventUtilsSystem.CfgFind.ParseEventShopStock(shopRow)
     )
-    local bought = type(eventData) == "table"
-        and type(eventData.Shop) == "table"
-        and tonumber(eventData.Shop[tostring(shopId)])
-        or 0
-    local stock = eventLightDarkUtilsSystem.CfgFind.ParseEventShopStock(shopRow)
-    return eventLightDarkUtilsSystem.CfgFind.GetEventShopRemain(bought or 0, stock)
 end
 
-local function buySelectedLightDarkShopItems()
-    if not eventLightDarkUtilsSystem.CfgFind.IsEventActive() then return false end
-
-    local currencyId = eventLightDarkUtilsSystem.CfgFind.GetEventCurrencyItemId()
-    local currency = currencyId
-        and eventLightDarkUtilsSystem.GetData.GetItemCountByIDOnClient(currencyId)
-        or 0
+local function buySelectedDragonInvasionItems()
+    if not eventUtilsSystem.CfgFind.IsEventActive() then return false end
+    local currencyId = eventUtilsSystem.CfgFind.GetEventCurrencyItemId()
+    local currency = currencyId and eventUtilsSystem.GetData.GetItemCountByIDOnClient(currencyId) or 0
     local boughtAny = false
 
-    for shopId, selected in next, selectedLightDarkShopIds do
+    for shopId, selected in next, selectedDragonInvasionShopIds do
         if selected then
-            local shopRow = getLightDarkShopRow(shopId)
+            local shopRow = getDragonInvasionShopRow(shopId)
             local price = shopRow and math.max(0, math.floor(tonumber(shopRow.price) or 0)) or 0
-            if shopRow and getLightDarkShopRemain(shopId, shopRow) > 0 and currency >= price then
+            if shopRow and getDragonInvasionShopRemain(shopId, shopRow) > 0 and currency >= price then
                 local success, result = pcall(function()
-                    return eventLightDarkUtilsSystem.NetWork.InvokeServer(
-                        eventLightDarkUtilsSystem.NetMsg.EVENT_SHOP_BUY,
-                        shopId
-                    )
+                    return eventUtilsSystem.NetWork.InvokeServer(eventUtilsSystem.NetMsg.EVENT_SHOP_BUY, shopId)
                 end)
                 if success and result == true then
                     boughtAny = true
-                    currency = currency - price
+                    currency -= price
                 end
             end
         end
     end
-
     return boughtAny
 end
 
-local function rollLightDarkEventTicket()
-    if not eventLightDarkUtilsSystem.CfgFind.IsEventActive() then return false end
-    local ticketId = eventLightDarkUtilsSystem.CfgFind.GetEventTicketItemId()
-    local ticketCount = ticketId
-        and eventLightDarkUtilsSystem.GetData.GetItemCountByIDOnClient(ticketId)
-        or 0
+local function rollDragonInvasionTicket()
+    if not eventUtilsSystem.CfgFind.IsEventActive() then return false end
+    local ticketId = eventUtilsSystem.CfgFind.GetEventTicketItemId()
+    local ticketCount = ticketId and eventUtilsSystem.GetData.GetItemCountByIDOnClient(ticketId) or 0
     if ticketCount <= 0 then return false end
 
     local success, result = pcall(function()
-        return eventLightDarkUtilsSystem.NetWork.InvokeServer(
-            eventLightDarkUtilsSystem.NetMsg.EVENT_HATCH_DRAW,
-            "ticket"
-        )
+        return eventUtilsSystem.NetWork.InvokeServer(eventUtilsSystem.NetMsg.EVENT_HATCH_DRAW, "ticket")
     end)
-    return success and type(result) == "table"
-        and type(result.itemIds) == "table"
-        and #result.itemIds > 0
+    return success and type(result) == "table" and type(result.itemIds) == "table" and #result.itemIds > 0
 end
 
-local function getActiveLightDarkTaskTags(resetType, eventTask)
-    local onceState = type(eventTask.Once) == "table" and eventTask.Once or {}
-    local completedOnce = type(onceState.Completed) == "table" and onceState.Completed or {}
-    local gameConfig = eventLightDarkUtilsSystem.CfgFind.GetEventGameConfig()
-    local onceRefill = gameConfig.OnceTaskRefill == true
-    local maxTasks = math.max(1, math.floor(tonumber(gameConfig.MaxTasksPerResetType) or 3))
-    local onceType = eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Once
-
-    if resetType == onceType and not onceRefill
-        and type(onceState.Accepted) == "table" and #onceState.Accepted > 0
-    then
-        local accepted = {}
-        for _, onlyTag in next, onceState.Accepted do
-            onlyTag = tostring(onlyTag or "")
-            if onlyTag ~= "" then accepted[#accepted + 1] = onlyTag end
-        end
-        return accepted
-    end
-
-    local tags = {}
-    for _, taskConfig in next, eventLightDarkUtilsSystem.CfgFind.GetTaskListByResetType(resetType) do
-        local onlyTag = tostring(taskConfig.onlyTag or "")
-        if onlyTag ~= "" and (resetType ~= onceType or tonumber(completedOnce[onlyTag]) ~= 1) then
-            tags[#tags + 1] = onlyTag
-            if #tags >= maxTasks then break end
-        end
-    end
-    return tags
-end
-
-local function getClaimableLightDarkQuestTags()
-    local eventData = eventLightDarkUtilsSystem.PlayerData.GetPlrDataByKey(
-        eventLightDarkUtilsSystem.LocalPlayer,
-        "Event"
-    )
+local function getDragonInvasionClaimableQuestTags()
+    local eventData = eventUtilsSystem.PlayerData.GetPlrDataByKey(eventUtilsSystem.LocalPlayer, "Event")
     local eventTask = type(eventData) == "table" and eventData.EventTask or nil
-    local claimableTags = {}
-    if not eventLightDarkUtilsSystem.CfgFind.IsEventActive() or type(eventTask) ~= "table" then
-        return claimableTags
-    end
+    local claimable = {}
+    if not eventUtilsSystem.CfgFind.IsEventActive() or type(eventTask) ~= "table" then return claimable end
 
-    local resetTypeKeys = {
-        [eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Timed] = "Timed",
-        [eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Daily] = "Daily",
-        [eventLightDarkUtilsSystem.EnumMgr.TaskResetType.Once] = "Once"
+    local resetTypes = {
+        { value = eventUtilsSystem.EnumMgr.TaskResetType.Timed, key = "Timed" },
+        { value = eventUtilsSystem.EnumMgr.TaskResetType.Daily, key = "Daily" },
+        { value = eventUtilsSystem.EnumMgr.TaskResetType.Once, key = "Once" }
     }
-
-    for _, resetType in next, lightDarkTaskResetTypes do
-        local state = type(eventTask[resetTypeKeys[resetType]]) == "table"
-            and eventTask[resetTypeKeys[resetType]]
-            or {}
+    for _, reset in next, resetTypes do
+        local state = type(eventTask[reset.key]) == "table" and eventTask[reset.key] or {}
         local progress = type(state.Progress) == "table" and state.Progress or {}
         local completed = type(state.Completed) == "table" and state.Completed or {}
-
-        for _, onlyTag in next, getActiveLightDarkTaskTags(resetType, eventTask) do
-            local taskConfig = eventLightDarkUtilsSystem.CfgFind.GetTaskCfgByOnlyTag(onlyTag)
-            if taskConfig then
-                local need = type(taskConfig.need) == "table" and taskConfig.need[1] or taskConfig.need
-                need = math.max(1, math.floor(tonumber(need) or 1))
-                local current = math.floor(tonumber(progress[onlyTag]) or 0)
-                if tonumber(completed[onlyTag]) ~= 1 and current >= need then
-                    claimableTags[#claimableTags + 1] = onlyTag
+        for _, taskConfig in next, eventUtilsSystem.CfgFind.GetTaskListByResetType(reset.value) do
+            local tag = tostring(taskConfig.onlyTag or "")
+            local need = type(taskConfig.need) == "table" and taskConfig.need[1] or taskConfig.need
+            if tag ~= "" and tonumber(completed[tag]) ~= 1 then
+                local config = eventUtilsSystem.CfgFind.GetTaskCfgByOnlyTag(tag)
+                need = config and (type(config.need) == "table" and config.need[1] or config.need) or need
+                if tonumber(progress[tag]) and tonumber(progress[tag]) >= tonumber(need or 1) then
+                    claimable[#claimable + 1] = tag
                 end
             end
         end
     end
-
-    return claimableTags
+    return claimable
 end
 
-local function claimLightDarkQuest(onlyTag)
+local function claimDragonInvasionQuest(tag)
     local success, result = pcall(function()
-        return eventLightDarkUtilsSystem.NetWork.InvokeServer(
-            eventLightDarkUtilsSystem.NetMsg.EVENT_TASK_CLAIM,
-            onlyTag
-        )
+        return eventUtilsSystem.NetWork.InvokeServer(eventUtilsSystem.NetMsg.EVENT_TASK_CLAIM, tag)
     end)
     return success and result == true
 end
 
-createLightDarkEventControl("Light Dark Shop Dropdown", function()
-    return EventLightVsDarkSection:Dropdown({
-        Title = "Event Shop Items",
-        Description = "Select one or more items to buy automatically",
-        Values = lightDarkShopOptions,
-        Value = {},
-        Multi = true,
-        AllowNone = true,
-        SearchBarEnabled = true,
-        Callback = function(values)
-            selectedLightDarkShopIds = {}
-            if type(values) ~= "table" then return end
-            for _, option in next, values do
-                local shopId = lightDarkShopIdByOption[option]
-                if shopId then selectedLightDarkShopIds[shopId] = true end
+DragonInvasionSection:Dropdown({
+    Title = "Dragon Invasion Shop Items",
+    Description = "Select one or more event items to buy",
+    Values = dragonInvasionShopOptions,
+    Value = {},
+    Multi = true,
+    AllowNone = true,
+    SearchBarEnabled = true,
+    Callback = function(values)
+        selectedDragonInvasionShopIds = {}
+        if type(values) ~= "table" then return end
+        for _, option in next, values do
+            local shopId = dragonInvasionShopIdByOption[option]
+            if shopId then selectedDragonInvasionShopIds[shopId] = true end
+        end
+    end
+})
+
+DragonInvasionSection:Toggle({
+    Title = "Auto Buy Dragon Invasion Shop",
+    Desc = "Automatically buy selected event items",
+    Icon = "shopping-cart",
+    Value = false,
+    Callback = function(state)
+        autoBuyDragonInvasionEnabled = state
+        if not state or autoBuyDragonInvasionLoopRunning then return end
+        autoBuyDragonInvasionLoopRunning = true
+        task.spawn(function()
+            while autoBuyDragonInvasionEnabled do
+                task.wait(buySelectedDragonInvasionItems() and 0.75 or 2)
             end
-        end
-    })
-end)
+            autoBuyDragonInvasionLoopRunning = false
+        end)
+    end
+})
 
-createLightDarkEventControl("Auto Buy Light Dark Shop Toggle", function()
-    return EventLightVsDarkSection:Toggle({
-        Title = "Auto Buy Event Shop",
-        Desc = "Automatically buy selected items while stock and tokens remain",
-        Icon = "shopping-cart",
-        Value = false,
-        Callback = function(state)
-            autoBuyLightDarkShopEnabled = state
-            if not state or autoBuyLightDarkShopLoopRunning then return end
+DragonInvasionSection:Toggle({
+    Title = "Auto Roll Dragon Invasion",
+    Desc = "Automatically roll using event tickets only",
+    Icon = "dices",
+    Value = false,
+    Callback = function(state)
+        autoDragonInvasionRollEnabled = state
+        if not state or autoDragonInvasionRollLoopRunning then return end
+        autoDragonInvasionRollLoopRunning = true
+        task.spawn(function()
+            while autoDragonInvasionRollEnabled do
+                task.wait(rollDragonInvasionTicket() and 0.75 or 2)
+            end
+            autoDragonInvasionRollLoopRunning = false
+        end)
+    end
+})
 
-            autoBuyLightDarkShopLoopRunning = true
-            task.spawn(function()
-                while autoBuyLightDarkShopEnabled do
-                    task.wait(buySelectedLightDarkShopItems() and 0.75 or 2)
+DragonInvasionSection:Toggle({
+    Title = "Auto Claim Dragon Invasion Quests",
+    Desc = "Automatically claim completed event quests",
+    Icon = "list-checks",
+    Value = false,
+    Callback = function(state)
+        autoClaimDragonInvasionQuestEnabled = state
+        if not state or autoClaimDragonInvasionQuestLoopRunning then return end
+        autoClaimDragonInvasionQuestLoopRunning = true
+        task.spawn(function()
+            while autoClaimDragonInvasionQuestEnabled do
+                local claimedAny = false
+                for _, tag in next, getDragonInvasionClaimableQuestTags() do
+                    if not autoClaimDragonInvasionQuestEnabled then break end
+                    if claimDragonInvasionQuest(tag) then claimedAny = true end
+                    task.wait(0.75)
                 end
-                autoBuyLightDarkShopLoopRunning = false
-            end)
-        end
-    })
-end)
-
-createLightDarkEventControl("Auto Light Dark Roll Toggle", function()
-    return EventLightVsDarkSection:Toggle({
-        Title = "Auto Roll",
-        Desc = "Automatically roll using event tickets only",
-        Icon = "dices",
-        Value = false,
-        Callback = function(state)
-            autoLightDarkRollEnabled = state
-            if not state or autoLightDarkRollLoopRunning then return end
-
-            autoLightDarkRollLoopRunning = true
-            task.spawn(function()
-                while autoLightDarkRollEnabled do
-                    task.wait(rollLightDarkEventTicket() and 0.75 or 2)
-                end
-                autoLightDarkRollLoopRunning = false
-            end)
-        end
-    })
-end)
-
-createLightDarkEventControl("Auto Claim Light Dark Quests Toggle", function()
-    return EventLightVsDarkSection:Toggle({
-        Title = "Auto Claim Quests",
-        Desc = "Automatically claim completed event quests",
-        Icon = "list-checks",
-        Value = false,
-        Callback = function(state)
-            autoClaimLightDarkQuestsEnabled = state
-            if not state or autoClaimLightDarkQuestsLoopRunning then return end
-
-            autoClaimLightDarkQuestsLoopRunning = true
-            task.spawn(function()
-                while autoClaimLightDarkQuestsEnabled do
-                    local claimableTags = getClaimableLightDarkQuestTags()
-                    local claimedAny = false
-
-                    for _, onlyTag in next, claimableTags do
-                        if not autoClaimLightDarkQuestsEnabled then break end
-                        if claimLightDarkQuest(onlyTag) then claimedAny = true end
-                        task.wait(0.75)
-                    end
-
-                    task.wait(claimedAny and 1 or 2)
-                end
-                autoClaimLightDarkQuestsLoopRunning = false
-            end)
-        end
-    })
-end)
+                task.wait(claimedAny and 1 or 2)
+            end
+            autoClaimDragonInvasionQuestLoopRunning = false
+        end)
+    end
+})
 
 -- Trade Tab
 local TradeTab = Window:Tab({
@@ -1938,10 +2085,10 @@ end)
 task.defer(function()
     AutoFarmSection:Close()
     AutoGameSection:Close()
+    DragonInvasionSection:Close()
     AutoAlchemySection:Close()
     AutoSellSection:Close()
     AutoBuySection:Close()
-    EventLightVsDarkSection:Close()
     AutoGiftSection:Close()
 end)
 
