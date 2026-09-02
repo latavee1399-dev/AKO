@@ -1,6 +1,13 @@
-
 local Window = loadstring(game:HttpGet("https://raw.githubusercontent.com/latavee1399-dev/AKO/refs/heads/main/CC%20ui"))()
 local WindUI = Window.WindUI
+
+Config = Config or {
+    ["Auto Dungeon V.2"] = false,
+    ["Auto Buy Meteor Shop"] = false,
+    ["Auto Roll Meteor"] = false,
+    ["Auto Claim Meteor Quest"] = false,
+}
+Ex_Function = Ex_Function or {}
 
 -- Auto Tab
 local AutoTab = Window:Tab({
@@ -45,6 +52,7 @@ AutoFarmSection:Toggle({
 -- Auto Dungeon
 local autoDungeonEnabled = false
 local autoDungeonLoopRunning = false
+local autoDungeonV2Toggle = nil
 local autoReturnEnabled = false
 local selectedDungeonStage = 1
 local activeDungeonTween = nil
@@ -227,6 +235,10 @@ local autoDungeonToggle = createAutoFarmControl("Auto Dungeon Toggle", function(
                 setDungeonFloating(false)
                 return
             end
+            Config["Auto Dungeon V.2"] = false
+            if autoDungeonV2Toggle and type(autoDungeonV2Toggle.Set) == "function" then
+                autoDungeonV2Toggle:Set(false)
+            end
             if autoDungeonLoopRunning then return end
 
             autoDungeonLoopRunning = true
@@ -265,6 +277,205 @@ createAutoFarmControl("Auto Return Toggle", function()
         Value = false,
         Callback = function(state)
             autoReturnEnabled = state
+        end
+    })
+end)
+
+-- AUTO DUNGEON V.2
+
+-- MODULES
+
+local DungeonV2UtilsSystem = require(game.ReplicatedFirst.AllSideCode.UtilsSystem)
+local DungeonV2Player = DungeonV2UtilsSystem.LocalPlayer
+local DungeonV2CfgFind = DungeonV2UtilsSystem.CfgFind
+local DungeonV2PlayerData = DungeonV2UtilsSystem.PlayerData
+local DungeonV2NetWork = DungeonV2UtilsSystem.NetWork
+local DungeonV2NetMsg = DungeonV2UtilsSystem.NetMsg
+
+-- CONFIG
+
+local AutoDungeonV2LoopRunning = false
+local ActiveDungeonV2Tween = nil
+local DungeonV2TeleportStage = 0
+local DungeonV2SceneName = "\229\156\186\230\153\175"
+local DungeonV2TeleportStartName = "\228\188\160\233\128\129\232\181\183\231\130\185"
+
+-- FUNCTIONS
+
+local function GetDungeonV2RootPart()
+    local Character = DungeonV2Player.Character
+    return Character and Character:FindFirstChild("HumanoidRootPart")
+end
+
+local function GetDungeonV2CareerMaxStage()
+    local CareerMaxStage = DungeonV2Player:FindFirstChild("CareerMaxStage")
+    if CareerMaxStage and CareerMaxStage:IsA("NumberValue") then
+        return math.max(0, math.floor(tonumber(CareerMaxStage.Value) or 0))
+    end
+    return math.max(0, math.floor(tonumber(DungeonV2PlayerData.GetPlrDataByKey(DungeonV2Player, "CareerMaxStage")) or 0))
+end
+
+local function GetDungeonV2BroomJumpMax()
+    local BroomId = tonumber(DungeonV2PlayerData.GetPlrDataByKey(DungeonV2Player, "NowBroom")) or 0
+    local NowBroom = DungeonV2Player:FindFirstChild("NowBroom")
+    if BroomId <= 0 and NowBroom and NowBroom:IsA("NumberValue") then
+        BroomId = math.floor(tonumber(NowBroom.Value) or 0)
+    end
+    if BroomId <= 0 then return 0 end
+
+    local BroomConfig = DungeonV2CfgFind.FindCfgByID(BroomId, DungeonV2UtilsSystem.EnumMgr.ItemType.Broom)
+    if not BroomConfig or tonumber(BroomConfig.tp) ~= DungeonV2UtilsSystem.EnumMgr.ItemType.Broom then return 0 end
+    return math.max(0, math.floor(tonumber(BroomConfig.Dungeon) or 0))
+end
+
+local function GetHighestDungeonV2TeleportStage()
+    local CareerMaxStage = GetDungeonV2CareerMaxStage()
+    local BroomJumpMax = GetDungeonV2BroomJumpMax()
+    if CareerMaxStage <= 0 or BroomJumpMax <= 0 then return 0 end
+
+    local ActualJumpMax = math.min(CareerMaxStage + 1, BroomJumpMax)
+    local DungeonConfig = DungeonV2CfgFind.GetCfgByName("dungeonConf")
+    local HighestStage = 0
+
+    for ConfigId, StageConfig in next, type(DungeonConfig) == "table" and DungeonConfig or {} do
+        local Stage = tonumber(ConfigId)
+        if Stage and Stage <= ActualJumpMax and type(StageConfig) == "table"
+            and type(StageConfig.TeleIcon) == "string" and StageConfig.TeleIcon ~= ""
+        then
+            HighestStage = math.max(HighestStage, Stage)
+        end
+    end
+
+    return HighestStage
+end
+
+local function GetDungeonV2TeleportStartCFrame()
+    local Scene = workspace:FindFirstChild(DungeonV2SceneName)
+    local TeleportStart = Scene and Scene:FindFirstChild(DungeonV2TeleportStartName)
+    return TeleportStart and TeleportStart:IsA("CFrameValue") and TeleportStart.Value or nil
+end
+
+local function TweenDungeonV2ToCFrame(TargetCFrame)
+    local RootPart = GetDungeonV2RootPart()
+    if not RootPart or not TargetCFrame then return false end
+
+    local Distance = (RootPart.Position - TargetCFrame.Position).Magnitude
+    if Distance <= 5 then
+        RootPart.CFrame = TargetCFrame
+        return true
+    end
+
+    setDungeonFloating(false)
+    local Tween = game:GetService("TweenService"):Create(
+        RootPart,
+        TweenInfo.new(math.clamp(Distance / 80, 0.2, 10), Enum.EasingStyle.Linear),
+        { CFrame = TargetCFrame }
+    )
+    ActiveDungeonV2Tween = Tween
+    Tween:Play()
+
+    while Config["Auto Dungeon V.2"] and Tween.PlaybackState == Enum.PlaybackState.Playing do
+        task.wait(0.1)
+    end
+
+    if not Config["Auto Dungeon V.2"] then Tween:Cancel() end
+    if ActiveDungeonV2Tween == Tween then ActiveDungeonV2Tween = nil end
+    return Config["Auto Dungeon V.2"] and Tween.PlaybackState == Enum.PlaybackState.Completed
+end
+
+local function WaitForDungeonV2StageJump()
+    local Started = false
+    local Deadline = os.clock() + 25
+
+    while Config["Auto Dungeon V.2"] and os.clock() < Deadline do
+        local Character = DungeonV2Player.Character
+        local StageJumping = DungeonV2Player:FindFirstChild("StageJumping")
+        local IsJumping = StageJumping and StageJumping:IsA("NumberValue") and StageJumping.Value > 0
+        local IsAnimating = Character and Character:GetAttribute("StageJumpAnimating") == true
+        local OpenThrough = DungeonV2Player:GetAttribute("DungeonJumpOpenThrough")
+
+        if IsJumping or IsAnimating or OpenThrough ~= nil then Started = true end
+        if Started and not IsJumping and not IsAnimating and OpenThrough == nil then return true end
+        task.wait(0.1)
+    end
+
+    return false
+end
+
+local function PrepareDungeonV2Teleport()
+    DungeonV2TeleportStage = GetHighestDungeonV2TeleportStage()
+    if DungeonV2TeleportStage <= 0 then return false end
+
+    local TeleportStart = GetDungeonV2TeleportStartCFrame()
+    if not TweenDungeonV2ToCFrame(TeleportStart) then return false end
+    if not Config["Auto Dungeon V.2"] then return false end
+
+    DungeonV2NetWork.FireServer(DungeonV2NetMsg.STAGE_JUMP_REQUEST, DungeonV2TeleportStage)
+    return WaitForDungeonV2StageJump()
+end
+
+local function FarmDungeonV2()
+    local ClearedValue = DungeonV2Player:FindFirstChild("DungeonRunMaxClear")
+    local ClearedStage = ClearedValue and math.floor(tonumber(ClearedValue.Value) or 0) or 0
+    local FarmStage = math.max(ClearedStage + 1, DungeonV2TeleportStage)
+    local StageRoot = getDungeonStageRoot(FarmStage)
+    if not StageRoot then return false end
+
+    local TargetCFrame = StageRoot.CFrame + Vector3.new(0, dungeonTweenHeight, 0)
+    if not TweenDungeonV2ToCFrame(TargetCFrame) then return false end
+    if Config["Auto Dungeon V.2"] then setDungeonFloating(true) end
+    return true
+end
+
+-- LOOPS
+
+Ex_Function["Auto Dungeon V.2"] = function()
+    local Prepared = false
+
+    while Config["Auto Dungeon V.2"] and task.wait(0.25) do
+        pcall(function()
+            if not Prepared then
+                Prepared = PrepareDungeonV2Teleport()
+            elseif not FarmDungeonV2() then
+                task.wait(1)
+            end
+        end)
+    end
+end
+
+-- CONTROLS
+
+autoDungeonV2Toggle = createAutoFarmControl("Auto Dungeon V.2 Toggle", function()
+    return AutoFarmSection:Toggle({
+        Title = "Auto Dungeon V.2",
+        Desc = "Use the highest unlocked Broom teleport, then farm from that stage",
+        Icon = "rocket",
+        Value = Config["Auto Dungeon V.2"] == true,
+        Callback = function(State)
+            Config["Auto Dungeon V.2"] = State
+
+            if not State then
+                if ActiveDungeonV2Tween then
+                    ActiveDungeonV2Tween:Cancel()
+                    ActiveDungeonV2Tween = nil
+                end
+                setDungeonFloating(false)
+                return
+            end
+            if AutoDungeonV2LoopRunning then return end
+
+            if autoDungeonToggle and type(autoDungeonToggle.Set) == "function" then
+                autoDungeonToggle:Set(false)
+            else
+                autoDungeonEnabled = false
+            end
+
+            AutoDungeonV2LoopRunning = true
+            task.spawn(function()
+                Ex_Function["Auto Dungeon V.2"]()
+                setDungeonFloating(false)
+                AutoDungeonV2LoopRunning = false
+            end)
         end
     })
 end)
@@ -545,150 +756,37 @@ local AutoGameSection = AutoTab:Section({
     Opened = false
 })
 
--- Auto Pick Dragon Nest drops
-local autoPickDragonNestEnabled = false
-local autoPickDragonNestLoopRunning = false
-local dragonNestPickupAttemptTimes = setmetatable({}, { __mode = "k" })
-local dragonNestMatchKeywords = { "dragon", "nest", "dragon_nest", "dragon-nest" }
-
-local function containsDragonNestKeyword(value)
-    local text = string.lower(tostring(value or ""))
-    for _, keyword in next, dragonNestMatchKeywords do
-        if string.find(text, keyword, 1, true) then
-            return true
-        end
-    end
-    return false
-end
-
-local function isDragonNestDrop(drop, dropsClient)
-    if not drop:IsA("Model") or drop.Name == "" or drop:GetAttribute("DropLanded") ~= true then
-        return false
-    end
-
-    -- Check the model name, metadata, and its container path. This covers
-    -- event drops whose display name differs from their internal item name.
-    if containsDragonNestKeyword(drop.Name) then return true end
-    for attributeName, attributeValue in next, drop:GetAttributes() do
-        if containsDragonNestKeyword(attributeName) or containsDragonNestKeyword(attributeValue) then
-            return true
-        end
-    end
-
-    local parent = drop.Parent
-    while parent and parent ~= dropsClient do
-        if containsDragonNestKeyword(parent.Name) then return true end
-        parent = parent.Parent
-    end
-    return false
-end
-
-local function pickDragonNestDrops()
-    local dropsClient = workspace:FindFirstChild("DropsClient")
-    if not dropsClient then return false end
-
-    local now = os.clock()
-    local attempted = false
-    local function visit(container)
-        local children = container:GetChildren()
-        for _, child in next, children do
-            if isDragonNestDrop(child, dropsClient) then
-                local lastAttempt = dragonNestPickupAttemptTimes[child] or 0
-                if now - lastAttempt >= 1 then
-                    dragonNestPickupAttemptTimes[child] = now
-                    attempted = triggerDropPickup(child) or attempted
-                end
-            end
-            if #child:GetChildren() > 0 then
-                visit(child)
-            end
-        end
-    end
-
-    visit(dropsClient)
-    return attempted
-end
-
-AutoGameSection:Toggle({
-    Title = "Auto Pick Dragon Nest",
-    Desc = "Automatically collect Dragon Nest ores, rocks, and item drops on the ground",
-    Icon = "gem",
-    Value = false,
-    Callback = function(state)
-        autoPickDragonNestEnabled = state
-        if not state or autoPickDragonNestLoopRunning then return end
-
-        autoPickDragonNestLoopRunning = true
-        task.spawn(function()
-            while autoPickDragonNestEnabled do
-                pickDragonNestDrops()
-                task.wait(0.25)
-            end
-            autoPickDragonNestLoopRunning = false
-        end)
-    end
-})
-
--- Auto Pick Light Altar drops
+-- Auto Pick Light Altar
 local autoPickLightAltarEnabled = false
 local autoPickLightAltarLoopRunning = false
 local lightAltarPickupAttemptTimes = setmetatable({}, { __mode = "k" })
-local lightAltarMatchKeywords = { "light altar", "light_altar", "light-altar", "lightaltar", "ligth altar", "altar" }
-
-local function containsLightAltarKeyword(value)
-    local text = string.lower(tostring(value or ""))
-    for _, keyword in next, lightAltarMatchKeywords do
-        if string.find(text, keyword, 1, true) then return true end
-    end
-    return false
-end
-
-local function isLightAltarDrop(drop, dropsClient)
-    if not drop:IsA("Model") or drop.Name == "" or drop:GetAttribute("DropLanded") ~= true then
-        return false
-    end
-
-    if containsLightAltarKeyword(drop.Name) then return true end
-    for attributeName, attributeValue in next, drop:GetAttributes() do
-        if containsLightAltarKeyword(attributeName) or containsLightAltarKeyword(attributeValue) then
-            return true
-        end
-    end
-
-    local parent = drop.Parent
-    while parent and parent ~= dropsClient do
-        if containsLightAltarKeyword(parent.Name) then return true end
-        parent = parent.Parent
-    end
-    return false
-end
+local lightAltarUtilsSystem = require(game.ReplicatedFirst.AllSideCode.UtilsSystem)
+local lightAltarItemId = lightAltarUtilsSystem.EnumMgr.ItemID.LightDropItem
 
 local function pickLightAltarDrops()
     local dropsClient = workspace:FindFirstChild("DropsClient")
-    if not dropsClient then return false end
+    if not dropsClient or not lightAltarItemId then return end
 
     local now = os.clock()
-    local attempted = false
-    local function visit(container)
-        for _, child in next, container:GetChildren() do
-            if isLightAltarDrop(child, dropsClient) then
-                local lastAttempt = lightAltarPickupAttemptTimes[child] or 0
+    for _, rarityFolder in next, dropsClient:GetChildren() do
+        for _, drop in next, rarityFolder:GetChildren() do
+            if drop:IsA("Model")
+                and drop:GetAttribute("DropLanded") == true
+                and tonumber(drop:GetAttribute("ItemId")) == lightAltarItemId
+            then
+                local lastAttempt = lightAltarPickupAttemptTimes[drop] or 0
                 if now - lastAttempt >= 1 then
-                    lightAltarPickupAttemptTimes[child] = now
-                    attempted = triggerDropPickup(child) or attempted
+                    lightAltarPickupAttemptTimes[drop] = now
+                    triggerDropPickup(drop)
                 end
             end
-            if #child:GetChildren() > 0 then visit(child) end
         end
     end
-
-    visit(dropsClient)
-    return attempted
 end
 
 AutoGameSection:Toggle({
     Title = "Auto Pick Light Altar",
-    Desc = "Automatically collect Light Altar ores, rocks, and item drops on the ground",
+    Desc = "Automatically collect Light Altar crystals",
     Icon = "sun",
     Value = false,
     Callback = function(state)
@@ -698,7 +796,7 @@ AutoGameSection:Toggle({
         autoPickLightAltarLoopRunning = true
         task.spawn(function()
             while autoPickLightAltarEnabled do
-                pickLightAltarDrops()
+                pcall(pickLightAltarDrops)
                 task.wait(0.25)
             end
             autoPickLightAltarLoopRunning = false
@@ -706,66 +804,36 @@ AutoGameSection:Toggle({
     end
 })
 
--- Auto Pick Dark Altar drops
+-- Auto Pick Dark Altar
 local autoPickDarkAltarEnabled = false
 local autoPickDarkAltarLoopRunning = false
 local darkAltarPickupAttemptTimes = setmetatable({}, { __mode = "k" })
-local darkAltarMatchKeywords = { "dark altar", "dark_altar", "dark-altar", "darkaltar", "altar" }
-
-local function containsDarkAltarKeyword(value)
-    local text = string.lower(tostring(value or ""))
-    for _, keyword in next, darkAltarMatchKeywords do
-        if string.find(text, keyword, 1, true) then return true end
-    end
-    return false
-end
-
-local function isDarkAltarDrop(drop, dropsClient)
-    if not drop:IsA("Model") or drop.Name == "" or drop:GetAttribute("DropLanded") ~= true then
-        return false
-    end
-
-    if containsDarkAltarKeyword(drop.Name) then return true end
-    for attributeName, attributeValue in next, drop:GetAttributes() do
-        if containsDarkAltarKeyword(attributeName) or containsDarkAltarKeyword(attributeValue) then
-            return true
-        end
-    end
-
-    local parent = drop.Parent
-    while parent and parent ~= dropsClient do
-        if containsDarkAltarKeyword(parent.Name) then return true end
-        parent = parent.Parent
-    end
-    return false
-end
+local darkAltarItemId = lightAltarUtilsSystem.EnumMgr.ItemID.DarkDropItem
 
 local function pickDarkAltarDrops()
     local dropsClient = workspace:FindFirstChild("DropsClient")
-    if not dropsClient then return false end
+    if not dropsClient or not darkAltarItemId then return end
 
     local now = os.clock()
-    local attempted = false
-    local function visit(container)
-        for _, child in next, container:GetChildren() do
-            if isDarkAltarDrop(child, dropsClient) then
-                local lastAttempt = darkAltarPickupAttemptTimes[child] or 0
+    for _, rarityFolder in next, dropsClient:GetChildren() do
+        for _, drop in next, rarityFolder:GetChildren() do
+            if drop:IsA("Model")
+                and drop:GetAttribute("DropLanded") == true
+                and tonumber(drop:GetAttribute("ItemId")) == darkAltarItemId
+            then
+                local lastAttempt = darkAltarPickupAttemptTimes[drop] or 0
                 if now - lastAttempt >= 1 then
-                    darkAltarPickupAttemptTimes[child] = now
-                    attempted = triggerDropPickup(child) or attempted
+                    darkAltarPickupAttemptTimes[drop] = now
+                    triggerDropPickup(drop)
                 end
             end
-            if #child:GetChildren() > 0 then visit(child) end
         end
     end
-
-    visit(dropsClient)
-    return attempted
 end
 
 AutoGameSection:Toggle({
     Title = "Auto Pick Dark Altar",
-    Desc = "Automatically collect Dark Altar ores, rocks, and item drops on the ground",
+    Desc = "Automatically collect Dark Altar crystals",
     Icon = "moon",
     Value = false,
     Callback = function(state)
@@ -775,7 +843,7 @@ AutoGameSection:Toggle({
         autoPickDarkAltarLoopRunning = true
         task.spawn(function()
             while autoPickDarkAltarEnabled do
-                pickDarkAltarDrops()
+                pcall(pickDarkAltarDrops)
                 task.wait(0.25)
             end
             autoPickDarkAltarLoopRunning = false
@@ -1536,218 +1604,255 @@ AutoBuySection:Toggle({
     end
 })
 
--- Event Tab
-local EventTab = Window:Tab({
-    Title = "Event",
-    Icon = "calendar-days"
-})
+-- EVENT TAB
 
--- Dragon Invasion Event
-local DragonInvasionSection = EventTab:Section({
-    Title = "Dragon Invasion",
-    Icon = "flame",
-    Opened = false
-})
+local EventTab = Window:Tab({ Title = "Event", Icon = "calendar-days" })
+local MeteorShowerSection = EventTab:Section({ Title = "Meteor Shower", Icon = "cloud-lightning", Opened = false })
 
-local eventUtilsSystem = require(game.ReplicatedFirst.AllSideCode.UtilsSystem)
-local autoBuyDragonInvasionEnabled = false
-local autoBuyDragonInvasionLoopRunning = false
-local autoDragonInvasionRollEnabled = false
-local autoDragonInvasionRollLoopRunning = false
-local autoClaimDragonInvasionQuestEnabled = false
-local autoClaimDragonInvasionQuestLoopRunning = false
-local selectedDragonInvasionShopIds = {}
-local dragonInvasionShopOptions = {}
-local dragonInvasionShopIdByOption = {}
+-- MODULES
 
-for _, shopRow in next, eventUtilsSystem.CfgFind.GetEventShopList() do
-    local shopId = math.floor(tonumber(shopRow.id) or 0)
-    local itemId = tonumber(shopRow.ItemId)
-    local itemConfig = itemId and eventUtilsSystem.CfgFind.FindCfgByID(itemId)
-    if shopId > 0 and itemConfig then
-        local itemName = itemConfig.ZhName or itemConfig.Name or ("Item " .. itemId)
-        local translatedName = eventUtilsSystem.TranslationHelper.TranslateByKey(itemName) or itemName
-        local price = math.max(0, math.floor(tonumber(shopRow.price) or 0))
-        local stock = eventUtilsSystem.CfgFind.ParseEventShopStock(shopRow)
-        local option = string.format("%s - %d Tokens (Stock %d)", translatedName, price, stock)
-        dragonInvasionShopOptions[#dragonInvasionShopOptions + 1] = option
-        dragonInvasionShopIdByOption[option] = shopId
+local MeteorUtilsSystem = require(game.ReplicatedFirst.AllSideCode.UtilsSystem)
+local MeteorCfgFind = MeteorUtilsSystem.CfgFind
+local MeteorGetData = MeteorUtilsSystem.GetData
+local MeteorEventData = MeteorGetData.Event
+local MeteorFeature = MeteorUtilsSystem.EnumMgr.WeatherFeature.Meteor
+local MeteorEventType = "MeteorFall"
+
+-- CONFIG
+
+local SelectedMeteorShopIds = {}
+local MeteorShopOptions = {}
+local MeteorShopIdByOption = {}
+local MeteorShopRowById = {}
+local MeteorBuyLoopRunning = false
+local MeteorRollLoopRunning = false
+local MeteorClaimLoopRunning = false
+
+-- FUNCTIONS
+
+local function IsMeteorShowerEventActive()
+    local EventConfig = MeteorCfgFind.GetActiveEventCfg()
+    return MeteorCfgFind.IsEventActive()
+        and type(EventConfig) == "table"
+        and EventConfig.EventTp == MeteorEventType
+end
+
+local function BuildMeteorShopOptions()
+    for _, ShopRow in next, MeteorCfgFind.GetEventShopList() do
+        local ShopId = math.floor(tonumber(ShopRow.id) or 0)
+        local ItemId = tonumber(ShopRow.ItemId)
+        local ItemConfig = ItemId and MeteorCfgFind.FindCfgByID(ItemId)
+
+        if ShopId > 0 and ItemConfig then
+            local RawName = ItemConfig.ZhName or ItemConfig.Name or ("Item " .. ItemId)
+            local ItemName = MeteorUtilsSystem.TranslationHelper.TranslateByKey(RawName) or RawName
+            local Price = math.max(0, math.floor(tonumber(ShopRow.price) or 0))
+            local Stock = MeteorCfgFind.ParseEventShopStock(ShopRow)
+            local Option = string.format("%s - %d Meteor Coins (Stock %d)", ItemName, Price, Stock)
+
+            MeteorShopOptions[#MeteorShopOptions + 1] = Option
+            MeteorShopIdByOption[Option] = ShopId
+            MeteorShopRowById[ShopId] = ShopRow
+        end
     end
 end
 
-table.sort(dragonInvasionShopOptions, function(left, right)
-    return (dragonInvasionShopIdByOption[left] or 0) < (dragonInvasionShopIdByOption[right] or 0)
+local function BuySelectedMeteorShopItems()
+    if not IsMeteorShowerEventActive() then return false end
+
+    local CurrencyId = MeteorCfgFind.GetEventCurrencyItemId()
+    local Currency = MeteorGetData.GetItemCountByIDOnClient(CurrencyId) or 0
+    local BoughtAny = false
+
+    for ShopId, Selected in next, SelectedMeteorShopIds do
+        if Selected then
+            local ShopRow = MeteorShopRowById[ShopId]
+            local EventData = MeteorUtilsSystem.PlayerData.GetPlrDataByKey(MeteorUtilsSystem.LocalPlayer, "Event")
+            local ShopData = type(EventData) == "table" and EventData.Shop or nil
+            local Bought = type(ShopData) == "table" and (ShopData[tostring(ShopId)] or ShopData[ShopId]) or 0
+            local Price = ShopRow and math.max(0, math.floor(tonumber(ShopRow.price) or 0)) or 0
+            local Stock = ShopRow and MeteorCfgFind.ParseEventShopStock(ShopRow) or 0
+            local Remaining = MeteorCfgFind.GetEventShopRemain(Bought, Stock)
+
+            if ShopRow and Remaining > 0 and Currency >= Price then
+                local Success, Result = pcall(function()
+                    return MeteorUtilsSystem.NetWork.InvokeServer(MeteorUtilsSystem.NetMsg.EVENT_SHOP_BUY, ShopId)
+                end)
+                if Success and Result == true then
+                    BoughtAny = true
+                    Currency = Currency - Price
+                end
+            end
+        end
+    end
+
+    return BoughtAny
+end
+
+local function RollMeteorShowerTicket()
+    if not IsMeteorShowerEventActive() or not MeteorEventData.IsDrawMode(MeteorFeature) then return false end
+
+    local DrawItemId = MeteorEventData.GetDrawCostItemId(MeteorFeature)
+    local DrawCost = MeteorEventData.GetDrawMaterialCost(MeteorUtilsSystem.LocalPlayer, MeteorFeature)
+    local CurrencyId = MeteorCfgFind.GetEventCurrencyItemId()
+
+    if not DrawItemId or DrawItemId == CurrencyId then return false end
+    if (MeteorGetData.GetItemCountByIDOnClient(DrawItemId) or 0) < DrawCost then return false end
+
+    local Success, Result = pcall(function()
+        return MeteorUtilsSystem.NetWork.InvokeServer(MeteorUtilsSystem.NetMsg.EVENT_METEOR_DRAW)
+    end)
+    return Success and type(Result) == "table"
+end
+
+local function GetClaimableMeteorQuestTags()
+    if not IsMeteorShowerEventActive() then return {} end
+
+    local EventData = MeteorUtilsSystem.PlayerData.GetPlrDataByKey(MeteorUtilsSystem.LocalPlayer, "Event")
+    local EventTasks = type(EventData) == "table" and EventData.EventTask or nil
+    if type(EventTasks) ~= "table" then return {} end
+
+    local ClaimableTags = {}
+    for _, ResetType in next, { "Timed", "Daily", "Once" } do
+        local State = type(EventTasks[ResetType]) == "table" and EventTasks[ResetType] or {}
+        local Progress = type(State.Progress) == "table" and State.Progress or {}
+        local Completed = type(State.Completed) == "table" and State.Completed or {}
+        local Accepted = type(State.Accepted) == "table" and State.Accepted or {}
+
+        for _, OnlyTag in next, Accepted do
+            local QuestConfig = MeteorCfgFind.GetTaskCfgByOnlyTag(OnlyTag)
+            local NeedValue = QuestConfig and QuestConfig.need
+            local Need = type(NeedValue) == "table" and NeedValue[1] or NeedValue
+            if QuestConfig and tonumber(Completed[OnlyTag]) ~= 1
+                and (tonumber(Progress[OnlyTag]) or 0) >= math.max(1, tonumber(Need) or 1)
+            then
+                ClaimableTags[#ClaimableTags + 1] = OnlyTag
+            end
+        end
+    end
+
+    return ClaimableTags
+end
+
+local function ClaimMeteorQuest(OnlyTag)
+    local Success, Result = pcall(function()
+        return MeteorUtilsSystem.NetWork.InvokeServer(MeteorUtilsSystem.NetMsg.EVENT_TASK_CLAIM, OnlyTag)
+    end)
+    return Success and Result == true
+end
+
+local function CreateMeteorControl(Name, Callback)
+    local Success, Control = pcall(Callback)
+    if not Success then
+        warn("[Magic Loot] Failed to create " .. Name .. ": " .. tostring(Control))
+        return nil
+    end
+    return Control
+end
+
+BuildMeteorShopOptions()
+
+-- LOOPS
+
+Ex_Function["Auto Buy Meteor Shop"] = function()
+    while Config["Auto Buy Meteor Shop"] and task.wait(1) do
+        pcall(BuySelectedMeteorShopItems)
+    end
+end
+
+Ex_Function["Auto Roll Meteor"] = function()
+    while Config["Auto Roll Meteor"] and task.wait(0.75) do
+        pcall(RollMeteorShowerTicket)
+    end
+end
+
+Ex_Function["Auto Claim Meteor Quest"] = function()
+    while Config["Auto Claim Meteor Quest"] and task.wait(1) do
+        pcall(function()
+            for _, OnlyTag in next, GetClaimableMeteorQuestTags() do
+                if not Config["Auto Claim Meteor Quest"] then break end
+                ClaimMeteorQuest(OnlyTag)
+                task.wait(0.75)
+            end
+        end)
+    end
+end
+
+-- CONTROLS
+
+CreateMeteorControl("Meteor Shop Dropdown", function()
+    return MeteorShowerSection:Dropdown({
+        Title = "Event Shop Items",
+        Description = "Select Meteor Shower shop items to buy",
+        Values = MeteorShopOptions,
+        Value = {},
+        Multi = true,
+        AllowNone = true,
+        SearchBarEnabled = true,
+        Callback = function(Values)
+            SelectedMeteorShopIds = {}
+            for _, Option in next, type(Values) == "table" and Values or {} do
+                local ShopId = MeteorShopIdByOption[Option]
+                if ShopId then SelectedMeteorShopIds[ShopId] = true end
+            end
+        end
+    })
 end)
 
-local function getDragonInvasionShopRow(shopId)
-    for _, shopRow in next, eventUtilsSystem.CfgFind.GetEventShopList() do
-        if math.floor(tonumber(shopRow.id) or 0) == shopId then return shopRow end
-    end
-    return nil
-end
-
-local function getDragonInvasionShopRemain(shopId, shopRow)
-    local eventData = eventUtilsSystem.PlayerData.GetPlrDataByKey(eventUtilsSystem.LocalPlayer, "Event")
-    local bought = type(eventData) == "table" and type(eventData.Shop) == "table"
-        and tonumber(eventData.Shop[tostring(shopId)]) or 0
-    return eventUtilsSystem.CfgFind.GetEventShopRemain(
-        bought or 0,
-        eventUtilsSystem.CfgFind.ParseEventShopStock(shopRow)
-    )
-end
-
-local function buySelectedDragonInvasionItems()
-    if not eventUtilsSystem.CfgFind.IsEventActive() then return false end
-    local currencyId = eventUtilsSystem.CfgFind.GetEventCurrencyItemId()
-    local currency = currencyId and eventUtilsSystem.GetData.GetItemCountByIDOnClient(currencyId) or 0
-    local boughtAny = false
-
-    for shopId, selected in next, selectedDragonInvasionShopIds do
-        if selected then
-            local shopRow = getDragonInvasionShopRow(shopId)
-            local price = shopRow and math.max(0, math.floor(tonumber(shopRow.price) or 0)) or 0
-            if shopRow and getDragonInvasionShopRemain(shopId, shopRow) > 0 and currency >= price then
-                local success, result = pcall(function()
-                    return eventUtilsSystem.NetWork.InvokeServer(eventUtilsSystem.NetMsg.EVENT_SHOP_BUY, shopId)
-                end)
-                if success and result == true then
-                    boughtAny = true
-                    currency -= price
-                end
-            end
+CreateMeteorControl("Auto Buy Meteor Shop Toggle", function()
+    return MeteorShowerSection:Toggle({
+        Title = "Auto Buy Event Shop",
+        Desc = "Automatically buy selected Meteor Shower shop items",
+        Icon = "shopping-cart",
+        Value = Config["Auto Buy Meteor Shop"] == true,
+        Callback = function(State)
+            Config["Auto Buy Meteor Shop"] = State
+            if not State or MeteorBuyLoopRunning then return end
+            MeteorBuyLoopRunning = true
+            task.spawn(function()
+                Ex_Function["Auto Buy Meteor Shop"]()
+                MeteorBuyLoopRunning = false
+            end)
         end
-    end
-    return boughtAny
-end
+    })
+end)
 
-local function rollDragonInvasionTicket()
-    if not eventUtilsSystem.CfgFind.IsEventActive() then return false end
-    local ticketId = eventUtilsSystem.CfgFind.GetEventTicketItemId()
-    local ticketCount = ticketId and eventUtilsSystem.GetData.GetItemCountByIDOnClient(ticketId) or 0
-    if ticketCount <= 0 then return false end
-
-    local success, result = pcall(function()
-        return eventUtilsSystem.NetWork.InvokeServer(eventUtilsSystem.NetMsg.EVENT_HATCH_DRAW, "ticket")
-    end)
-    return success and type(result) == "table" and type(result.itemIds) == "table" and #result.itemIds > 0
-end
-
-local function getDragonInvasionClaimableQuestTags()
-    local eventData = eventUtilsSystem.PlayerData.GetPlrDataByKey(eventUtilsSystem.LocalPlayer, "Event")
-    local eventTask = type(eventData) == "table" and eventData.EventTask or nil
-    local claimable = {}
-    if not eventUtilsSystem.CfgFind.IsEventActive() or type(eventTask) ~= "table" then return claimable end
-
-    local resetTypes = {
-        { value = eventUtilsSystem.EnumMgr.TaskResetType.Timed, key = "Timed" },
-        { value = eventUtilsSystem.EnumMgr.TaskResetType.Daily, key = "Daily" },
-        { value = eventUtilsSystem.EnumMgr.TaskResetType.Once, key = "Once" }
-    }
-    for _, reset in next, resetTypes do
-        local state = type(eventTask[reset.key]) == "table" and eventTask[reset.key] or {}
-        local progress = type(state.Progress) == "table" and state.Progress or {}
-        local completed = type(state.Completed) == "table" and state.Completed or {}
-        for _, taskConfig in next, eventUtilsSystem.CfgFind.GetTaskListByResetType(reset.value) do
-            local tag = tostring(taskConfig.onlyTag or "")
-            local need = type(taskConfig.need) == "table" and taskConfig.need[1] or taskConfig.need
-            if tag ~= "" and tonumber(completed[tag]) ~= 1 then
-                local config = eventUtilsSystem.CfgFind.GetTaskCfgByOnlyTag(tag)
-                need = config and (type(config.need) == "table" and config.need[1] or config.need) or need
-                if tonumber(progress[tag]) and tonumber(progress[tag]) >= tonumber(need or 1) then
-                    claimable[#claimable + 1] = tag
-                end
-            end
+CreateMeteorControl("Auto Roll Meteor Toggle", function()
+    return MeteorShowerSection:Toggle({
+        Title = "Auto Roll",
+        Desc = "Automatically roll Meteor Shower using Meteor Shards only",
+        Icon = "dices",
+        Value = Config["Auto Roll Meteor"] == true,
+        Callback = function(State)
+            Config["Auto Roll Meteor"] = State
+            if not State or MeteorRollLoopRunning then return end
+            MeteorRollLoopRunning = true
+            task.spawn(function()
+                Ex_Function["Auto Roll Meteor"]()
+                MeteorRollLoopRunning = false
+            end)
         end
-    end
-    return claimable
-end
+    })
+end)
 
-local function claimDragonInvasionQuest(tag)
-    local success, result = pcall(function()
-        return eventUtilsSystem.NetWork.InvokeServer(eventUtilsSystem.NetMsg.EVENT_TASK_CLAIM, tag)
-    end)
-    return success and result == true
-end
-
-DragonInvasionSection:Dropdown({
-    Title = "Dragon Invasion Shop Items",
-    Description = "Select one or more event items to buy",
-    Values = dragonInvasionShopOptions,
-    Value = {},
-    Multi = true,
-    AllowNone = true,
-    SearchBarEnabled = true,
-    Callback = function(values)
-        selectedDragonInvasionShopIds = {}
-        if type(values) ~= "table" then return end
-        for _, option in next, values do
-            local shopId = dragonInvasionShopIdByOption[option]
-            if shopId then selectedDragonInvasionShopIds[shopId] = true end
+CreateMeteorControl("Auto Claim Meteor Quest Toggle", function()
+    return MeteorShowerSection:Toggle({
+        Title = "Auto Claim Quest",
+        Desc = "Automatically claim completed Meteor Shower quests",
+        Icon = "list-checks",
+        Value = Config["Auto Claim Meteor Quest"] == true,
+        Callback = function(State)
+            Config["Auto Claim Meteor Quest"] = State
+            if not State or MeteorClaimLoopRunning then return end
+            MeteorClaimLoopRunning = true
+            task.spawn(function()
+                Ex_Function["Auto Claim Meteor Quest"]()
+                MeteorClaimLoopRunning = false
+            end)
         end
-    end
-})
+    })
+end)
 
-DragonInvasionSection:Toggle({
-    Title = "Auto Buy Dragon Invasion Shop",
-    Desc = "Automatically buy selected event items",
-    Icon = "shopping-cart",
-    Value = false,
-    Callback = function(state)
-        autoBuyDragonInvasionEnabled = state
-        if not state or autoBuyDragonInvasionLoopRunning then return end
-        autoBuyDragonInvasionLoopRunning = true
-        task.spawn(function()
-            while autoBuyDragonInvasionEnabled do
-                task.wait(buySelectedDragonInvasionItems() and 0.75 or 2)
-            end
-            autoBuyDragonInvasionLoopRunning = false
-        end)
-    end
-})
-
-DragonInvasionSection:Toggle({
-    Title = "Auto Roll Dragon Invasion",
-    Desc = "Automatically roll using event tickets only",
-    Icon = "dices",
-    Value = false,
-    Callback = function(state)
-        autoDragonInvasionRollEnabled = state
-        if not state or autoDragonInvasionRollLoopRunning then return end
-        autoDragonInvasionRollLoopRunning = true
-        task.spawn(function()
-            while autoDragonInvasionRollEnabled do
-                task.wait(rollDragonInvasionTicket() and 0.75 or 2)
-            end
-            autoDragonInvasionRollLoopRunning = false
-        end)
-    end
-})
-
-DragonInvasionSection:Toggle({
-    Title = "Auto Claim Dragon Invasion Quests",
-    Desc = "Automatically claim completed event quests",
-    Icon = "list-checks",
-    Value = false,
-    Callback = function(state)
-        autoClaimDragonInvasionQuestEnabled = state
-        if not state or autoClaimDragonInvasionQuestLoopRunning then return end
-        autoClaimDragonInvasionQuestLoopRunning = true
-        task.spawn(function()
-            while autoClaimDragonInvasionQuestEnabled do
-                local claimedAny = false
-                for _, tag in next, getDragonInvasionClaimableQuestTags() do
-                    if not autoClaimDragonInvasionQuestEnabled then break end
-                    if claimDragonInvasionQuest(tag) then claimedAny = true end
-                    task.wait(0.75)
-                end
-                task.wait(claimedAny and 1 or 2)
-            end
-            autoClaimDragonInvasionQuestLoopRunning = false
-        end)
-    end
-})
-
--- Trade Tab
 local TradeTab = Window:Tab({
     Title = "Trade",
     Icon = "handshake"
@@ -2085,10 +2190,10 @@ end)
 task.defer(function()
     AutoFarmSection:Close()
     AutoGameSection:Close()
-    DragonInvasionSection:Close()
     AutoAlchemySection:Close()
     AutoSellSection:Close()
     AutoBuySection:Close()
+    MeteorShowerSection:Close()
     AutoGiftSection:Close()
 end)
 
