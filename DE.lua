@@ -330,7 +330,7 @@ task.spawn(function()
 	end
 end)
 
--- ฟังก์ชัน Auto Delivery แบบสมบูรณ์
+-- à¸Ÿà¸±à¸‡à¸à¹Œà¸Šà¸±à¸™ Auto Delivery à¹à¸šà¸šà¸ªà¸¡à¸šà¸¹à¸£à¸“à¹Œ
 local function AutoDelivery()
     local ENV = (getgenv and getgenv()) or _G
 
@@ -858,26 +858,26 @@ task.spawn(function()
 
     local function checkAndStartJob()
         local currentMiles = tonumber(miles.Value) or 0
-        print("[System] กำลังเช็คระยะทาง... ปัจจุบันมี: " .. tostring(currentMiles) .. " Miles")
+        print("[System] à¸à¸³à¸¥à¸±à¸‡à¹€à¸Šà¹‡à¸„à¸£à¸°à¸¢à¸°à¸—à¸²à¸‡... à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™à¸¡à¸µ: " .. tostring(currentMiles) .. " Miles")
         
         if not EnableAutoFarm or currentMiles >= TargetMiles then
             if not EnableAutoFarm then
-                print("[System] AutoFarm ขับรถถูกตั้งค่าปิดไว้ กำลังข้ามไปรับงาน Delivery ทันที...")
+                print("[System] AutoFarm à¸‚à¸±à¸šà¸£à¸–à¸–à¸¹à¸à¸•à¸±à¹‰à¸‡à¸„à¹ˆà¸²à¸›à¸´à¸”à¹„à¸§à¹‰ à¸à¸³à¸¥à¸±à¸‡à¸‚à¹‰à¸²à¸¡à¹„à¸›à¸£à¸±à¸šà¸‡à¸²à¸™ Delivery à¸—à¸±à¸™à¸—à¸µ...")
             else
-                print("[System] ระยะทางครบ " .. tostring(TargetMiles) .. " Miles แล้ว! กำลังปิด AutoFarm และเริ่มส่งของ...")
+                print("[System] à¸£à¸°à¸¢à¸°à¸—à¸²à¸‡à¸„à¸£à¸š " .. tostring(TargetMiles) .. " Miles à¹à¸¥à¹‰à¸§! à¸à¸³à¸¥à¸±à¸‡à¸›à¸´à¸” AutoFarm à¹à¸¥à¸°à¹€à¸£à¸´à¹ˆà¸¡à¸ªà¹ˆà¸‡à¸‚à¸­à¸‡...")
             end
-            -- 1. ปิดออโต้ฟาร์ม (หยุด loop วาร์ป)
+            -- 1. à¸›à¸´à¸”à¸­à¸­à¹‚à¸•à¹‰à¸Ÿà¸²à¸£à¹Œà¸¡ (à¸«à¸¢à¸¸à¸” loop à¸§à¸²à¸£à¹Œà¸›)
             AutoFarm = false
             
-            -- 2. รีเซ็ตตัวละครให้ตายและเกิดใหม่
+            -- 2. à¸£à¸µà¹€à¸‹à¹‡à¸•à¸•à¸±à¸§à¸¥à¸°à¸„à¸£à¹ƒà¸«à¹‰à¸•à¸²à¸¢à¹à¸¥à¸°à¹€à¸à¸´à¸”à¹ƒà¸«à¸¡à¹ˆ
             local char = LocalPlayer.Character
             if char and char:FindFirstChild("Humanoid") then
                 char.Humanoid.Health = 0
                 LocalPlayer.CharacterAdded:Wait()
-                task.wait(1.5) -- รอโหลดแมพสักครู่
+                task.wait(1.5) -- à¸£à¸­à¹‚à¸«à¸¥à¸”à¹à¸¡à¸žà¸ªà¸±à¸à¸„à¸£à¸¹à¹ˆ
             end
 
-            -- 3. รันรีโมทเริ่มงาน
+            -- 3. à¸£à¸±à¸™à¸£à¸µà¹‚à¸¡à¸—à¹€à¸£à¸´à¹ˆà¸¡à¸‡à¸²à¸™
             local Event = ReplicatedStorage:WaitForChild("Remotes", 5)
             if Event then
                 local reqEvent = Event:WaitForChild("RequestStartJobSession", 5)
@@ -886,10 +886,10 @@ task.spawn(function()
                 end
             end
             
-            -- 4. เรียกใช้ฟังก์ชัน Auto Delivery
+            -- 4. à¹€à¸£à¸µà¸¢à¸à¹ƒà¸Šà¹‰à¸Ÿà¸±à¸‡à¸à¹Œà¸Šà¸±à¸™ Auto Delivery
             AutoDelivery()
         else
-            print("[System] ระยะทางยังไม่ครบ " .. tostring(TargetMiles) .. " (ปัจจุบัน " .. tostring(currentMiles) .. ") ระบบ AutoFarm จะขับรถต่อไป...")
+            print("[System] à¸£à¸°à¸¢à¸°à¸—à¸²à¸‡à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸„à¸£à¸š " .. tostring(TargetMiles) .. " (à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™ " .. tostring(currentMiles) .. ") à¸£à¸°à¸šà¸š AutoFarm à¸ˆà¸°à¸‚à¸±à¸šà¸£à¸–à¸•à¹ˆà¸­à¹„à¸›...")
         end
     end
 
@@ -919,7 +919,7 @@ end
 
 local function UpdateDescription()
 	local messages = string.format(
-		"💰 Cash : %s , 🚗 Miles : %s",
+		"ðŸ’° Cash : %s , ðŸš— Miles : %s",
 		FormatNumber(Cash.Value),
 		FormatNumber(Miles.Value)
 	)
