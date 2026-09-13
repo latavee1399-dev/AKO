@@ -59,7 +59,10 @@ local activeDungeonTween = nil
 local dungeonBattleAreaName = "\230\136\152\230\150\151\229\140\186\229\159\159"
 local dungeonTweenHeight = 5
 local shouldResumeAutoDungeonAfterFullBag = false
+local shouldResumeAutoDungeonV2AfterFullBag = false
 local pausingAutoDungeonForFullBag = false
+local AutoDungeonV2LoopRunning = false
+local ActiveDungeonV2Tween = nil
 
 local dungeonStageValues = {}
 for stage = 1, 30 do
@@ -294,8 +297,6 @@ local DungeonV2NetMsg = DungeonV2UtilsSystem.NetMsg
 
 -- CONFIG
 
-local AutoDungeonV2LoopRunning = false
-local ActiveDungeonV2Tween = nil
 local DungeonV2TeleportStage = 0
 local DungeonV2SceneName = "\229\156\186\230\153\175"
 local DungeonV2TeleportStartName = "\228\188\160\233\128\129\232\181\183\231\130\185"
@@ -455,6 +456,9 @@ autoDungeonV2Toggle = createAutoFarmControl("Auto Dungeon V.2 Toggle", function(
             Config["Auto Dungeon V.2"] = State
 
             if not State then
+                if not pausingAutoDungeonForFullBag then
+                    shouldResumeAutoDungeonV2AfterFullBag = false
+                end
                 if ActiveDungeonV2Tween then
                     ActiveDungeonV2Tween:Cancel()
                     ActiveDungeonV2Tween = nil
@@ -676,6 +680,9 @@ end
 
 local function stopAutoDungeonForFullBag()
     shouldResumeAutoDungeonAfterFullBag = autoDungeonEnabled
+    shouldResumeAutoDungeonV2AfterFullBag = Config["Auto Dungeon V.2"] == true
+
+    pausingAutoDungeonForFullBag = true
     autoDungeonEnabled = false
     if activeDungeonTween then
         activeDungeonTween:Cancel()
@@ -684,31 +691,51 @@ local function stopAutoDungeonForFullBag()
     setDungeonFloating(false)
 
     if autoDungeonToggle and type(autoDungeonToggle.Set) == "function" then
-        pausingAutoDungeonForFullBag = true
         pcall(function()
             autoDungeonToggle:Set(false)
         end)
-        pausingAutoDungeonForFullBag = false
     end
+
+    Config["Auto Dungeon V.2"] = false
+    if ActiveDungeonV2Tween then
+        ActiveDungeonV2Tween:Cancel()
+        ActiveDungeonV2Tween = nil
+    end
+    if autoDungeonV2Toggle and type(autoDungeonV2Toggle.Set) == "function" then
+        pcall(function()
+            autoDungeonV2Toggle:Set(false)
+        end)
+    end
+    pausingAutoDungeonForFullBag = false
 end
 
 local function resumeAutoDungeonAfterFullBag()
-    if not shouldResumeAutoDungeonAfterFullBag then return end
+    if not shouldResumeAutoDungeonAfterFullBag and not shouldResumeAutoDungeonV2AfterFullBag then return end
 
     task.spawn(function()
         task.wait(2)
         local deadline = os.clock() + 5
-        while autoDungeonLoopRunning and os.clock() < deadline do
+        while (autoDungeonLoopRunning or AutoDungeonV2LoopRunning) and os.clock() < deadline do
             task.wait(0.1)
         end
 
-        if not autoReturnFullBagEnabled or not shouldResumeAutoDungeonAfterFullBag then return end
-        shouldResumeAutoDungeonAfterFullBag = false
+        if not autoReturnFullBagEnabled then return end
 
-        if autoDungeonToggle and type(autoDungeonToggle.Set) == "function" then
-            autoDungeonToggle:Set(true)
-        else
-            autoDungeonEnabled = true
+        local resumeAutoDungeon = shouldResumeAutoDungeonAfterFullBag
+        local resumeAutoDungeonV2 = shouldResumeAutoDungeonV2AfterFullBag
+        shouldResumeAutoDungeonAfterFullBag = false
+        shouldResumeAutoDungeonV2AfterFullBag = false
+
+        if resumeAutoDungeonV2 and autoDungeonV2Toggle and type(autoDungeonV2Toggle.Set) == "function" then
+            autoDungeonV2Toggle:Set(true)
+        elseif resumeAutoDungeon then
+            if autoDungeonToggle and type(autoDungeonToggle.Set) == "function" then
+                autoDungeonToggle:Set(true)
+            else
+                autoDungeonEnabled = true
+            end
+        elseif resumeAutoDungeonV2 then
+            Config["Auto Dungeon V.2"] = true
         end
     end)
 end
@@ -721,7 +748,12 @@ createAutoFarmControl("Auto Return Full Bag Toggle", function()
         Value = false,
         Callback = function(state)
             autoReturnFullBagEnabled = state
-            if not state or autoReturnFullBagLoopRunning then return end
+            if not state then
+                shouldResumeAutoDungeonAfterFullBag = false
+                shouldResumeAutoDungeonV2AfterFullBag = false
+                return
+            end
+            if autoReturnFullBagLoopRunning then return end
 
             autoReturnFullBagLoopRunning = true
             task.spawn(function()
@@ -847,6 +879,83 @@ AutoGameSection:Toggle({
                 task.wait(0.25)
             end
             autoPickDarkAltarLoopRunning = false
+        end)
+    end
+})
+
+-- Auto Pick Meteor Shards
+local autoPickMeteorShardsEnabled = false
+local autoPickMeteorShardsLoopRunning = false
+local meteorShardPickupAttemptTimes = setmetatable({}, { __mode = "k" })
+local meteorPickerUtilsSystem = require(game.ReplicatedFirst.AllSideCode.UtilsSystem)
+local meteorPickerFeature = meteorPickerUtilsSystem.EnumMgr.WeatherFeature.Meteor
+
+local function isMeteorShardDrop(drop)
+    if not drop or not drop:IsA("Model") then return false end
+
+    local meteorShardItemId
+    pcall(function()
+        meteorShardItemId = meteorPickerUtilsSystem.GetData.Event.GetDrawCostItemId(meteorPickerFeature)
+    end)
+    local dropItemId = tonumber(drop:GetAttribute("ItemId"))
+    if meteorShardItemId and dropItemId == tonumber(meteorShardItemId) then
+        return true
+    end
+
+    local names = { string.lower(drop.Name) }
+    for _, child in next, drop:GetChildren() do
+        names[#names + 1] = string.lower(child.Name)
+    end
+
+    for _, name in next, names do
+        if string.find(name, "meteor", 1, true)
+            or string.find(name, "shard", 1, true)
+            or string.find(name, "meteorite", 1, true)
+        then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function pickMeteorShardDrops()
+    local dropsClient = workspace:FindFirstChild("DropsClient")
+    if not dropsClient then return end
+
+    local now = os.clock()
+    for _, rarityFolder in next, dropsClient:GetChildren() do
+        for _, drop in next, rarityFolder:GetChildren() do
+            if drop:IsA("Model")
+                and drop:GetAttribute("DropLanded") == true
+                and isMeteorShardDrop(drop)
+            then
+                local lastAttempt = meteorShardPickupAttemptTimes[drop] or 0
+                if now - lastAttempt >= 1 then
+                    meteorShardPickupAttemptTimes[drop] = now
+                    triggerDropPickup(drop)
+                end
+            end
+        end
+    end
+end
+
+AutoGameSection:Toggle({
+    Title = "Auto Pick Meteor Shards",
+    Desc = "Automatically collect Meteor Shower shards",
+    Icon = "gem",
+    Value = false,
+    Callback = function(state)
+        autoPickMeteorShardsEnabled = state
+        if not state or autoPickMeteorShardsLoopRunning then return end
+
+        autoPickMeteorShardsLoopRunning = true
+        task.spawn(function()
+            while autoPickMeteorShardsEnabled do
+                pcall(pickMeteorShardDrops)
+                task.wait(0.25)
+            end
+            autoPickMeteorShardsLoopRunning = false
         end)
     end
 })
