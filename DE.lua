@@ -1,4 +1,4 @@
-repeat task.wait() until game:IsLoaded() and game:GetService("Players").LocalPlayer
+repeat task.wait(10) until game:IsLoaded() and game:GetService("Players").LocalPlayer
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -41,7 +41,7 @@ end
 local Camera = Workspace.CurrentCamera
 
 local UserConfig = (getgenv and getgenv().Config) or _G.Config or {}
-local TargetMiles = UserConfig.TargetMiles or 100
+local TargetMiles = UserConfig.TargetMiles or 0
 local EnableAutoFarm = UserConfig.EnableAutoFarm
 if EnableAutoFarm == nil then EnableAutoFarm = true end
 local EnableWhiteScreen = UserConfig.WhiteScreen or false
@@ -336,23 +336,23 @@ local function AutoDelivery()
 
     local DEFAULT_CONFIG = {
         TeleportHeight = 4,
-        AfterTeleportDelay = 0.35,           -- ลดจาก 0.75 เป็น 0.35
-        AfterLeaveDelay = 0.25,              -- ลดจาก 0.6 เป็น 0.25
-        StatePollDelay = 0.1,                -- ลดจาก 0.2 เป็น 0.1
-        LoopDelay = 0.2,                     -- ลดจาก 0.5 เป็น 0.2
-        InteractDelay = 0.5,                 -- ลดจาก 1.0 เป็น 0.5
+        AfterTeleportDelay = 0.75,
+        AfterLeaveDelay = 0.6,
+        StatePollDelay = 0.2,
+        LoopDelay = 0.5,
+        InteractDelay = 1.0,
         StartTimeout = 8,
-        CollectTimeout = 10,                 -- ลดจาก 14 เป็น 10
-        DropTimeout = 8,                     -- ลดจาก 12 เป็น 8
-        NextStateTimeout = 4,                -- ลดจาก 6 เป็น 4
-        UseDirectFunctions = true,           -- เปิดใช้งาน direct functions
-        UseDirectPickupFunction = true,      -- เปิดใช้งาน direct pickup
-        UseDirectCompleteFunction = true,    -- เปิดใช้งาน direct complete
-        MinDropoffWait = 8.0,                -- ลดจาก 10.5 เป็น 8.0
-        CollectingStopTimeout = 2,           -- ลดจาก 4 เป็น 2
+        CollectTimeout = 14,
+        DropTimeout = 12,
+        NextStateTimeout = 6,
+        UseDirectFunctions = false,
+        UseDirectPickupFunction = false,
+        UseDirectCompleteFunction = false,
+        MinDropoffWait = 10.5,
+        CollectingStopTimeout = 4,
         QuitOtherJobs = true,
         AntiAfk = true,
-        Debug = false, 
+        Debug = true,
     }
 
     ENV.DY_DELIVERY_FARM_CONFIG = ENV.DY_DELIVERY_FARM_CONFIG or {}
