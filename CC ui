@@ -852,7 +852,7 @@ function Window:InitBaseTabs()
         Description = "เลือก Theme ของ UI",
         Values      = {"Dark", "Light", "Midnight", "Amber", "Aqua", "Rose", "Plant", "Red", "Indigo", "Sky", "Violet", "Emerald", "Crimson", "MonoKai Pro", "Cotton Candy", "Mellowsi", "Rianbow"},
         Value       = "Amber",
-        Default     = "Amber",
+        Default     = "Light",
         Callback    = function(Value) WindUI:SetTheme(Value) end,
     })
 
