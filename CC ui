@@ -3,6 +3,14 @@
 --  Created with WindUI by Footagesus
 -- =============================================
 
+local RuntimeConfig = ...
+RuntimeConfig = type(RuntimeConfig) == "table" and RuntimeConfig or {}
+
+local UIConfig = {
+    Author = tostring(RuntimeConfig.Author or "Roblox Script "),
+    TagTitle = tostring(RuntimeConfig.TagTitle or RuntimeConfig.BrandTag or "AoProFree"),
+}
+
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 -- =============================================
@@ -14,7 +22,7 @@ WindUI:SetNotificationLower(true)
 local Window = WindUI:CreateWindow({
     Title = "Delex Hub",
     Icon = "rbxassetid://97074562899662",
-    Author = "Roblox Script ",
+    Author = UIConfig.Author,
     Folder = "Delex",
     Size = UDim2.fromOffset(580, 460),
     Transparent = true,
@@ -29,11 +37,34 @@ Window.WindUI = WindUI
 -- Tags (FPS & Ping)
 -- =============================================
 
-Window:Tag({
-    Title = "AoProFree",
+local BrandTag = Window:Tag({
+    Title = UIConfig.TagTitle,
     Icon = "star", -- optional
     Color = Color3.fromRGB(160, 196, 255), -- custom color
 })
+
+Window.UIConfig = UIConfig
+
+function Window:SetBranding(config)
+    config = type(config) == "table" and config or {}
+
+    if config.Author ~= nil then
+        UIConfig.Author = tostring(config.Author)
+        if self.SetAuthor then
+            self:SetAuthor(UIConfig.Author)
+        else
+            self.Author = UIConfig.Author
+        end
+    end
+
+    local tagTitle = config.TagTitle or config.BrandTag
+    if tagTitle ~= nil then
+        UIConfig.TagTitle = tostring(tagTitle)
+        BrandTag:SetTitle(UIConfig.TagTitle)
+    end
+
+    return self
+end
 
 local FPSTag = Window:Tag({
     Title = "FPS: 0",
@@ -541,6 +572,7 @@ function Window:InitBaseTabs()
     local configNameInput = ""
     local selectedConfig  = nil
     local configDropdown  = nil
+    local autoLoadToggle  = nil
 
     local function trimConfigName(value)
         local name = tostring(value or ""):match("^%s*(.-)%s*$")
@@ -571,6 +603,54 @@ function Window:InitBaseTabs()
         if not create then return nil end
         local ok, config = pcall(function() return create(ConfigManager, name) end)
         return ok and config or nil
+    end
+
+    local function getConfigModule(name)
+        if not name or name == "" then return nil end
+        if ConfigManager.GetConfig then
+            local ok, config = pcall(function() return ConfigManager:GetConfig(name) end)
+            if ok and type(config) == "table" and config.Path then
+                return config
+            end
+        end
+        return openConfig(name)
+    end
+
+    local function syncAutoLoadToggle()
+        if not autoLoadToggle then return end
+        local config = getConfigModule(selectedConfig)
+        autoLoadToggle:Set(config and config.AutoLoad == true or false, false)
+    end
+
+    local function saveAutoLoadState(config, state)
+        if not config then return false end
+        if config.SetAsCurrent then config:SetAsCurrent() end
+        -- Load first so changing only AutoLoad does not overwrite the config's saved values.
+        if config.Load then pcall(function() config:Load() end) end
+        if config.SetAutoLoad then
+            config:SetAutoLoad(state)
+        else
+            config.AutoLoad = state
+        end
+        return pcall(function() config:Save() end)
+    end
+
+    local function loadAutoLoadConfig()
+        if not ConfigManager then return end
+        local autoConfigName = nil
+        for _, name in ipairs(getConfigList()) do
+            local config = getConfigModule(name)
+            if config and config.AutoLoad then
+                autoConfigName = name
+            end
+        end
+        if autoConfigName then
+            selectedConfig = autoConfigName
+            if configDropdown and configDropdown.Select then
+                pcall(function() configDropdown:Select(autoConfigName) end)
+            end
+            syncAutoLoadToggle()
+        end
     end
 
     local function refreshConfigDropdown(preferred)
@@ -610,7 +690,48 @@ function Window:InitBaseTabs()
             Values   = initList,
             Value    = selectedConfig,
             AllowNone = true,
-            Callback = function(value) selectedConfig = value end,
+            Callback = function(value)
+                selectedConfig = value
+                syncAutoLoadToggle()
+            end,
+        })
+
+        autoLoadToggle = SectionCfg:Toggle({
+            Title       = "Auto Load Config",
+            Description = "Load the selected config when the UI starts",
+            Icon        = "refresh-cw",
+            Value       = false,
+            Callback    = function(state)
+                if not selectedConfig or selectedConfig == "" then
+                    autoLoadToggle:Set(false, false)
+                    WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
+                    return
+                end
+
+                local config = getConfigModule(selectedConfig)
+                if not config then
+                    autoLoadToggle:Set(not state, false)
+                    WindUI:Notify({ Title = "Config", Content = "Failed to open config", Duration = 3, Icon = "alert-circle" })
+                    return
+                end
+
+                if state then
+                    for _, name in ipairs(getConfigList()) do
+                        if name ~= selectedConfig then
+                            local other = getConfigModule(name)
+                            if other and other.AutoLoad then
+                                saveAutoLoadState(other, false)
+                            end
+                        end
+                    end
+                end
+
+                local ok = saveAutoLoadState(config, state)
+                if not ok then
+                    autoLoadToggle:Set(not state, false)
+                    WindUI:Notify({ Title = "Config", Content = "Failed to update Auto Load", Duration = 3, Icon = "alert-circle" })
+                end
+            end,
         })
 
         SectionCfg:Button({
@@ -636,6 +757,7 @@ function Window:InitBaseTabs()
                 if ok then
                     selectedConfig = name
                     refreshConfigDropdown(name)
+                    syncAutoLoadToggle()
                     WindUI:Notify({ Title = "Config", Content = "Config created successfully", Duration = 3, Icon = "check-circle" })
                 else
                     WindUI:Notify({ Title = "Config", Content = "Failed to create config", Duration = 3, Icon = "alert-circle" })
@@ -758,6 +880,8 @@ function Window:InitBaseTabs()
         end,
         ChangedCallback = function(key) end,
     })
+
+    loadAutoLoadConfig()
 
     WindUI:Notify({
         Title   = "Delex Hub",
