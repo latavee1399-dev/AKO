@@ -1155,6 +1155,10 @@ if oldWindUI then
 end
 
 local Window = loadstring(game:HttpGet("https://raw.githubusercontent.com/latavee1399-dev/AKO/refs/heads/main/CC%20ui"))()
+Window:SetBranding({
+    Author = "Anime Dice",
+    TagTitle = "Ao โปรฟรีไอสัส",
+})
 local AutoGameTab = Window:Tab({
     Title = "Auto Game",
     Desc = "Automation features",
