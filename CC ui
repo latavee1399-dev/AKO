@@ -15,7 +15,7 @@ local Window = WindUI:CreateWindow({
     Title = "Delex Hub",
     Icon = "rbxassetid://97074562899662",
     Author = "Roblox Script ",
-    Folder = "GAG2Hub",
+    Folder = "Delex",
     Size = UDim2.fromOffset(580, 460),
     Transparent = true,
     Theme = "Midnight",
@@ -118,7 +118,6 @@ end
 local Players     = game:GetService("Players")
 local RunService  = game:GetService("RunService")
 local UIS         = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
 local function getChar() return LocalPlayer.Character end
@@ -189,6 +188,7 @@ function Window:InitBaseTabs()
     SectionMovement:Toggle({
         Title    = "Walk Speed",
         Icon = "zap",
+        Flag     = "walk_speed_enabled",
         Value    = false,
         Callback = function(state)
             walkEnabled = state
@@ -198,6 +198,7 @@ function Window:InitBaseTabs()
 
     SectionMovement:Slider({
         Title    = "Walk Speed Value",
+        Flag = "walk_speed",
         Value = {
             Min = 10,
             Max = 150,
@@ -261,6 +262,7 @@ function Window:InitBaseTabs()
     SectionMovement:Toggle({
         Title    = "Fly",
         Icon = "feather",
+        Flag     = "fly_enabled",
         Value    = false,
         Callback = function(state)
             flyEnabled = state
@@ -270,6 +272,7 @@ function Window:InitBaseTabs()
 
     SectionMovement:Slider({
         Title    = "Fly Speed",
+        Flag = "fly_speed",
         Value = {
             Min = 5,
             Max = 50,
@@ -324,6 +327,7 @@ function Window:InitBaseTabs()
     SectionMovement:Toggle({
         Title    = "Super Jump",
         Icon = "chevrons-up",
+        Flag     = "super_jump_enabled",
         Value    = false,
         Callback = function(state)
             jumpEnabled = state
@@ -333,6 +337,7 @@ function Window:InitBaseTabs()
 
     SectionMovement:Slider({
         Title    = "Jump Power",
+        Flag = "jump_power",
         Value = {
             Min = 10,
             Max = 200,
@@ -379,6 +384,7 @@ function Window:InitBaseTabs()
     SectionMovement:Toggle({
         Title    = "Infinity Jump",
         Icon = "infinity",
+        Flag     = "infinity_jump_enabled",
         Value    = false,
         Callback = function(state)
             infJumpEnabled = state
@@ -418,6 +424,7 @@ function Window:InitBaseTabs()
     SectionMovement:Toggle({
         Title    = "Noclip",
         Icon = "ghost",
+        Flag     = "noclip_enabled",
         Value    = false,
         Callback = function(state)
             noclipEnabled = state
@@ -529,157 +536,186 @@ function Window:InitBaseTabs()
         end,
     })
 
-    -- Config File System
-    local CONFIG_ROOT   = "Config"
-    local CONFIG_FOLDER = "Config/ChickChick"
-
-    if not isfolder(CONFIG_ROOT)   then makefolder(CONFIG_ROOT) end
-    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
-
+    -- WindUI Config Manager stores configs under WindUI/Delex/config/.
+    local ConfigManager = self.ConfigManager
     local configNameInput = ""
     local selectedConfig  = nil
     local configDropdown  = nil
-    local SavedFlags      = {}
 
-    local function getConfigList()
-        local list = {}
-        local ok, files = pcall(listfiles, CONFIG_FOLDER)
-        if ok and files then
-            for _, fp in ipairs(files) do
-                local name = fp:match("([^/\\]+)%.json$")
-                if name then table.insert(list, name) end
-            end
+    local function trimConfigName(value)
+        local name = tostring(value or ""):match("^%s*(.-)%s*$")
+        if name == "" or name:find("%.%.") or name:find("[\\/:*?\"<>|%c]") then
+            return nil
         end
-        return list
+        return name
     end
 
-    local function refreshConfigDropdown()
-        if configDropdown then
-            local list = getConfigList()
-            configDropdown:Refresh(list, true)
-            selectedConfig = nil
+    local function getConfigList()
+        if not ConfigManager or not ConfigManager.AllConfigs then
+            return {}
+        end
+        local ok, list = pcall(function() return ConfigManager:AllConfigs() end)
+        return ok and list or {}
+    end
+
+    local function configExists(name)
+        for _, existing in ipairs(getConfigList()) do
+            if existing == name then return true end
+        end
+        return false
+    end
+
+    local function openConfig(name)
+        if not ConfigManager then return nil end
+        local create = ConfigManager.Config or ConfigManager.CreateConfig
+        if not create then return nil end
+        local ok, config = pcall(function() return create(ConfigManager, name) end)
+        return ok and config or nil
+    end
+
+    local function refreshConfigDropdown(preferred)
+        if not configDropdown then return end
+        configDropdown:Refresh(getConfigList(), true)
+        selectedConfig = preferred
+        if preferred and configDropdown.Select then
+            pcall(function() configDropdown:Select(preferred) end)
         end
     end
 
     -- Section: Config
     local SectionCfg = TabSettings:Section({
         Title = "Config",
-        Desc  = "Config System",
+        Desc  = "WindUI Config Manager",
         Icon  = "settings",
         Side  = "right",
     })
 
-    SectionCfg:Input({
-        Title       = "Config Name",
-        Placeholder = "Enter Config Name",
-        Callback    = function(text) configNameInput = text end,
-    })
+    if not ConfigManager then
+        SectionCfg:Paragraph({
+            Title = "Config Manager unavailable",
+            Desc  = "This WindUI build does not expose ConfigManager.",
+            Icon  = "alert-triangle",
+        })
+    else
+        SectionCfg:Input({
+            Title       = "Config Name",
+            Placeholder = "Enter Config Name",
+            Callback    = function(text) configNameInput = text end,
+        })
 
-    SectionCfg:Button({
-        Title    = "Create Config",
-        Color    = Color3.fromRGB(57, 255, 20),
-        Icon     = "plus-circle",
-        Callback = function()
-            local name = (configNameInput or ""):match("^%s*(.-)%s*$")
-            if name == "" then
-                WindUI:Notify({ Title = "Config", Content = "Please enter a config name", Duration = 3, Icon = "alert-circle" })
-                return
-            end
-            local path = CONFIG_FOLDER .. "/" .. name .. ".json"
-            if isfile(path) then
-                WindUI:Notify({ Title = "Config", Content = "Config already exists", Duration = 3, Icon = "alert-triangle" })
-                return
-            end
-            local ok, _ = pcall(writefile, path, HttpService:JSONEncode(SavedFlags))
-            if ok then
-                WindUI:Notify({ Title = "Config", Content = "Config created successfully", Duration = 3, Icon = "check-circle" })
-                refreshConfigDropdown()
-            else
-                WindUI:Notify({ Title = "Config", Content = "Failed to create config", Duration = 3, Icon = "alert-circle" })
-            end
-        end,
-    })
+        local initList = getConfigList()
+        selectedConfig = initList[1]
+        configDropdown = SectionCfg:Dropdown({
+            Title    = "Select Config",
+            Values   = initList,
+            Value    = selectedConfig,
+            AllowNone = true,
+            Callback = function(value) selectedConfig = value end,
+        })
 
-    local initList = getConfigList()
-    configDropdown = SectionCfg:Dropdown({
-        Title    = "Select Config",
-        Values   = initList,
-        Default  = initList[1] or "",
-        Callback = function(value) selectedConfig = value end,
-    })
+        SectionCfg:Button({
+            Title    = "Create Config",
+            Color    = Color3.fromRGB(57, 255, 20),
+            Icon     = "plus-circle",
+            Callback = function()
+                local name = trimConfigName(configNameInput)
+                if not name then
+                    WindUI:Notify({ Title = "Config", Content = "Enter a valid config name", Duration = 3, Icon = "alert-circle" })
+                    return
+                end
+                if configExists(name) then
+                    WindUI:Notify({ Title = "Config", Content = "Config already exists", Duration = 3, Icon = "alert-triangle" })
+                    return
+                end
+                local config = openConfig(name)
+                if not config then
+                    WindUI:Notify({ Title = "Config", Content = "Failed to create config", Duration = 3, Icon = "alert-circle" })
+                    return
+                end
+                local ok = pcall(function() config:Save() end)
+                if ok then
+                    selectedConfig = name
+                    refreshConfigDropdown(name)
+                    WindUI:Notify({ Title = "Config", Content = "Config created successfully", Duration = 3, Icon = "check-circle" })
+                else
+                    WindUI:Notify({ Title = "Config", Content = "Failed to create config", Duration = 3, Icon = "alert-circle" })
+                end
+            end,
+        })
 
-    SectionCfg:Button({
-        Title    = "Save Config",
-        Color    = Color3.fromRGB(57, 255, 20),
-        Icon     = "save",
-        Callback = function()
-            if not selectedConfig or selectedConfig == "" then
-                WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
-                return
-            end
-            local ok, _ = pcall(writefile, CONFIG_FOLDER .. "/" .. selectedConfig .. ".json", HttpService:JSONEncode(SavedFlags))
-            if ok then
-                WindUI:Notify({ Title = "Config", Content = "Config saved successfully", Duration = 3, Icon = "check-circle" })
-            else
-                WindUI:Notify({ Title = "Config", Content = "Failed to save config", Duration = 3, Icon = "alert-circle" })
-            end
-        end,
-    })
+        SectionCfg:Button({
+            Title    = "Save Config",
+            Color    = Color3.fromRGB(57, 255, 20),
+            Icon     = "save",
+            Callback = function()
+                if not selectedConfig or selectedConfig == "" then
+                    WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
+                    return
+                end
+                local config = openConfig(selectedConfig)
+                local ok = config and pcall(function() config:Save() end)
+                WindUI:Notify({
+                    Title = "Config",
+                    Content = ok and "Config saved successfully" or "Failed to save config",
+                    Duration = 3,
+                    Icon = ok and "check-circle" or "alert-circle",
+                })
+            end,
+        })
 
-    SectionCfg:Button({
-        Title    = "Load Config",
-        Color    = Color3.fromRGB(24, 119, 242),
-        Icon     = "folder-open",
-        Callback = function()
-            if not selectedConfig or selectedConfig == "" then
-                WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
-                return
-            end
-            local path = CONFIG_FOLDER .. "/" .. selectedConfig .. ".json"
-            if not isfile(path) then
-                WindUI:Notify({ Title = "Config", Content = "Config file not found", Duration = 3, Icon = "alert-circle" })
-                return
-            end
-            local okR, raw = pcall(readfile, path)
-            if not okR then
-                WindUI:Notify({ Title = "Config", Content = "Failed to read config", Duration = 3, Icon = "alert-circle" })
-                return
-            end
-            local okD, data = pcall(HttpService.JSONDecode, HttpService, raw)
-            if not okD or type(data) ~= "table" then
-                WindUI:Notify({ Title = "Config", Content = "Invalid config format", Duration = 3, Icon = "alert-circle" })
-                return
-            end
-            for k, v in pairs(data) do SavedFlags[k] = v end
-            if data.Theme   then WindUI:SetTheme(data.Theme) end
-            if data.Acrylic ~= nil then WindUI:ToggleAcrylic(data.Acrylic) end
-            WindUI:Notify({ Title = "Config", Content = "Config loaded successfully", Duration = 3, Icon = "check-circle" })
-        end,
-    })
+        SectionCfg:Button({
+            Title    = "Load Config",
+            Color    = Color3.fromRGB(24, 119, 242),
+            Icon     = "folder-open",
+            Callback = function()
+                if not selectedConfig or selectedConfig == "" then
+                    WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
+                    return
+                end
+                local config = openConfig(selectedConfig)
+                local ok, result = false, nil
+                if config then
+                    ok, result = pcall(function() return config:Load() end)
+                end
+                local loaded = ok and result ~= false
+                WindUI:Notify({
+                    Title = "Config",
+                    Content = loaded and "Config loaded successfully" or "Failed to load config",
+                    Duration = 3,
+                    Icon = loaded and "check-circle" or "alert-circle",
+                })
+            end,
+        })
 
-    SectionCfg:Button({
-        Title    = "Delete Config",
-        Icon     = "trash-2",
-        Color    = Color3.fromRGB(220, 60, 60),
-        Callback = function()
-            if not selectedConfig or selectedConfig == "" then
-                WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
-                return
-            end
-            local path = CONFIG_FOLDER .. "/" .. selectedConfig .. ".json"
-            if not isfile(path) then
-                WindUI:Notify({ Title = "Config", Content = "Config file not found", Duration = 3, Icon = "alert-circle" })
-                return
-            end
-            local ok, _ = pcall(delfile, path)
-            if ok then
-                WindUI:Notify({ Title = "Config", Content = "Config deleted successfully", Duration = 3, Icon = "check-circle" })
-                refreshConfigDropdown()
-            else
-                WindUI:Notify({ Title = "Config", Content = "Failed to delete config", Duration = 3, Icon = "alert-circle" })
-            end
-        end,
-    })
+        SectionCfg:Button({
+            Title    = "Delete Config",
+            Icon     = "trash-2",
+            Color    = Color3.fromRGB(220, 60, 60),
+            Callback = function()
+                if not selectedConfig or selectedConfig == "" then
+                    WindUI:Notify({ Title = "Config", Content = "Please select a config first", Duration = 3, Icon = "alert-circle" })
+                    return
+                end
+                local ok, result = pcall(function()
+                    if ConfigManager.DeleteConfig then
+                        return ConfigManager:DeleteConfig(selectedConfig)
+                    end
+                    local config = openConfig(selectedConfig)
+                    return config and config:Delete()
+                end)
+                local deleted = ok and result ~= false
+                if deleted then
+                    refreshConfigDropdown()
+                end
+                WindUI:Notify({
+                    Title = "Config",
+                    Content = deleted and "Config deleted successfully" or "Failed to delete config",
+                    Duration = 3,
+                    Icon = deleted and "check-circle" or "alert-circle",
+                })
+            end,
+        })
+    end
 
     -- Section: Ui Setting
     local SectionConfig = TabSettings:Section({
@@ -690,8 +726,10 @@ function Window:InitBaseTabs()
 
     SectionConfig:Dropdown({
         Title       = "Theme",
+        Flag        = "theme",
         Description = "เลือก Theme ของ UI",
         Values      = {"Dark", "Light", "Midnight", "Amber", "Aqua", "Rose", "Plant", "Red", "Indigo", "Sky", "Violet", "Emerald", "Crimson", "MonoKai Pro", "Cotton Candy", "Mellowsi", "Rianbow"},
+        Value       = "Amber",
         Default     = "Amber",
         Callback    = function(Value) WindUI:SetTheme(Value) end,
     })
@@ -700,12 +738,15 @@ function Window:InitBaseTabs()
         Title       = "Acrylic Background",
         Description = "เปิดใช้ Acrylic Blur",
         Icon = "layers",
+        Flag        = "acrylic",
         Value       = false,
         Callback    = function(State) WindUI:ToggleAcrylic(State) end,
     })
 
     SectionConfig:Keybind({
         Title           = "Toggle UI",
+        Flag            = "toggle_ui_keybind",
+        Value           = "RightControl",
         Description     = "ปุ่มกด เปิด/ปิด UI",
         Default         = Enum.KeyCode.RightControl,
         Callback        = function()
