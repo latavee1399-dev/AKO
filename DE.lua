@@ -1,4 +1,4 @@
-repeat task.wait(10) until game:IsLoaded() and game:GetService("Players").LocalPlayer
+repeat task.wait() until game:IsLoaded() and game:GetService("Players").LocalPlayer
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -41,7 +41,7 @@ end
 local Camera = Workspace.CurrentCamera
 
 local UserConfig = (getgenv and getgenv().Config) or _G.Config or {}
-local TargetMiles = UserConfig.TargetMiles or 0
+local TargetMiles = UserConfig.TargetMiles or 100
 local EnableAutoFarm = UserConfig.EnableAutoFarm
 if EnableAutoFarm == nil then EnableAutoFarm = true end
 local EnableWhiteScreen = UserConfig.WhiteScreen or false
@@ -330,31 +330,31 @@ task.spawn(function()
 	end
 end)
 
--- ฟังก์ชัน Auto Delivery แบบสมบูรณ์
 local function AutoDelivery()
     local ENV = (getgenv and getgenv()) or _G
 
     local DEFAULT_CONFIG = {
         TeleportHeight = 4,
-        AfterTeleportDelay = 0.75,
-        AfterLeaveDelay = 0.6,
-        StatePollDelay = 0.2,
-        LoopDelay = 0.5,
-        InteractDelay = 1.0,
+        AfterTeleportDelay = 0.35,           -- ลดจาก 0.75 เป็น 0.35
+        AfterLeaveDelay = 0.25,              -- ลดจาก 0.6 เป็น 0.25
+        StatePollDelay = 0.1,                -- ลดจาก 0.2 เป็น 0.1
+        LoopDelay = 0.2,                     -- ลดจาก 0.5 เป็น 0.2
+        InteractDelay = 0.5,                 -- ลดจาก 1.0 เป็น 0.5
         StartTimeout = 8,
-        CollectTimeout = 14,
-        DropTimeout = 12,
-        NextStateTimeout = 6,
-        UseDirectFunctions = false,
-        UseDirectPickupFunction = false,
-        UseDirectCompleteFunction = false,
-        MinDropoffWait = 10.5,
-        CollectingStopTimeout = 4,
+        CollectTimeout = 10,                 -- ลดจาก 14 เป็น 10
+        DropTimeout = 8,                     -- ลดจาก 12 เป็น 8
+        NextStateTimeout = 4,                -- ลดจาก 6 เป็น 4
+        UseDirectFunctions = true,           -- เปิดใช้งาน direct functions
+        UseDirectPickupFunction = true,      -- เปิดใช้งาน direct pickup
+        UseDirectCompleteFunction = true,    -- เปิดใช้งาน direct complete
+        MinDropoffWait = 8.0,                -- ลดจาก 10.5 เป็น 8.0
+        CollectingStopTimeout = 2,           -- ลดจาก 4 เป็น 2
         QuitOtherJobs = true,
         AntiAfk = true,
         Debug = true,
     }
 
+    -- CONFIG
     ENV.DY_DELIVERY_FARM_CONFIG = ENV.DY_DELIVERY_FARM_CONFIG or {}
     local CONFIG = ENV.DY_DELIVERY_FARM_CONFIG
     for key, value in pairs(DEFAULT_CONFIG) do
@@ -381,17 +381,19 @@ local function AutoDelivery()
         warn("[Dy Delivery]", ...)
     end
 
+    -- SERVICES
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local CollectionService = game:GetService("CollectionService")
     local Workspace = game:GetService("Workspace")
     local VirtualUser = game:GetService("VirtualUser")
+    local GuiService = game:GetService("GuiService")
+    local VirtualInputManager = game:GetService("VirtualInputManager")
 
     local LocalPlayer = Players.LocalPlayer
     local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 
-    local RequestStartJobSession = Remotes:WaitForChild("RequestStartJobSession")
-    local RequestEndJobSession = Remotes:WaitForChild("RequestEndJobSession")
+    -- REMOTES
     local DeliveryLocationInteracted = Remotes:WaitForChild("DeliveryLocationInteracted")
     local DeliveryLocationLeft = Remotes:WaitForChild("DeliveryLocationLeft")
     local DeliveryStateChanged = Remotes:WaitForChild("DeliveryStateChanged")
@@ -399,8 +401,12 @@ local function AutoDelivery()
     local AttemptDeliveryPickup = Remotes:FindFirstChild("AttemptDeliveryPickup")
     local AttemptDeliveryComplete = Remotes:FindFirstChild("AttemptDeliveryComplete")
 
+    -- MODULES
     local DeliveryJobTask
     local DeliveryUtil
+    local JobsController
+    local DeliveryModeController
+    local DeliveryConstants
 
     pcall(function()
         DeliveryJobTask = require(ReplicatedStorage.Modules.Client.Jobs.Tasks.DeliveryJobTask)
@@ -409,6 +415,20 @@ local function AutoDelivery()
     pcall(function()
         DeliveryUtil = require(ReplicatedStorage.Modules.Shared.Jobs.Delivery.DeliveryUtil)
     end)
+
+    pcall(function()
+        JobsController = require(ReplicatedStorage.Modules.Client.Jobs.JobsController)
+    end)
+
+    pcall(function()
+        DeliveryModeController = require(ReplicatedStorage.Modules.Client.Jobs.Delivery.DeliveryModeController)
+    end)
+
+    pcall(function()
+        DeliveryConstants = require(ReplicatedStorage.Modules.Shared.Jobs.Delivery.DeliveryConstants)
+    end)
+
+    local HIGH_RISK_MODE = DeliveryConstants and DeliveryConstants.DeliveryModes.HighRisk or "HighRisk"
 
     local pickupRadius = 25
     pcall(function()
@@ -440,6 +460,7 @@ local function AutoDelivery()
         end)
     end
 
+    -- FUNCTIONS
     local function getState()
         if DeliveryJobTask then
             local ok, state = pcall(function()
@@ -467,6 +488,184 @@ local function AutoDelivery()
         until not isEnabled() or os.clock() - start >= timeout
 
         return getState()
+    end
+
+    local function getHighRiskModeButton()
+        local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        local promptUi = playerGui and playerGui:FindFirstChild("PromptUI")
+        local prompt = promptUi and promptUi:FindFirstChild("PromptV2")
+        local title = prompt and prompt:FindFirstChild("Title")
+        local buttonsFrame = prompt and prompt:FindFirstChild("ButtonsFrame")
+        local hardButton = buttonsFrame and buttonsFrame:FindFirstChild("HighRiskDelivery")
+
+        if not promptUi or not promptUi.Enabled or not prompt or not prompt.Visible then
+            return nil
+        end
+
+        if not title or title.Text ~= "Choose Your Delivery Mode" then
+            return nil
+        end
+
+        if not hardButton or not hardButton:IsA("GuiButton") or not hardButton.Visible or not hardButton.Active then
+            return nil
+        end
+
+        return hardButton
+    end
+
+    local function waitForHighRiskModeButton(timeout)
+        local start = os.clock()
+
+        repeat
+            local button = getHighRiskModeButton()
+            if button then
+                return button
+            end
+
+            task.wait(CONFIG.StatePollDelay)
+        until not isEnabled() or os.clock() - start >= timeout
+
+        return nil
+    end
+
+    local function getconnect(targetButton)
+        local clicked = false
+        local events = {"Activated", "MouseButton1Down", "MouseButton1Click", "MouseButton1Up"}
+
+        if not targetButton or not targetButton:IsA("GuiButton") then
+            return false
+        end
+
+        for _, eventName in next, events do
+            pcall(function()
+                for _, connection in next, getconnections(targetButton[eventName]) do
+                    pcall(function()
+                        if type(connection.Function) ~= "function" then
+                            return
+                        end
+
+                        connection.Function()
+                        clicked = true
+                    end)
+
+                    if clicked then
+                        break
+                    end
+                end
+            end)
+
+            if clicked then
+                return true
+            end
+        end
+
+        return false
+    end
+
+    local function ClickGui(targetButton)
+        local clicked = false
+
+        if typeof(targetButton) ~= "Instance" or not targetButton:IsA("GuiObject") then
+            return false
+        end
+
+        xpcall(function()
+            local start = os.clock()
+            repeat
+                if not isEnabled() then
+                    return
+                end
+
+                GuiService.SelectedObject = targetButton
+                task.wait()
+            until GuiService.SelectedObject == targetButton or os.clock() - start >= 2
+
+            if GuiService.SelectedObject ~= targetButton then
+                return
+            end
+
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+            task.wait(0.05)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+            clicked = true
+        end, function(err)
+            warn("[Dy Delivery] ClickGui Error:", err)
+        end)
+
+        pcall(function()
+            GuiService.SelectedObject = nil
+        end)
+
+        return clicked
+    end
+
+    local function clickGuiWithFallback(targetButton)
+        if getconnect(targetButton) then
+            return true
+        end
+
+        return ClickGui(targetButton)
+    end
+
+    local function getDeliveryMode()
+        local state = getState()
+        if state and state.DeliveryMode then
+            return state.DeliveryMode
+        end
+
+        local character = LocalPlayer.Character
+        local mode = LocalPlayer:GetAttribute("DeliveryMode")
+            or (character and character:GetAttribute("DeliveryMode"))
+
+        if mode then
+            return mode
+        end
+
+        if DeliveryModeController then
+            local ok, currentMode = pcall(function()
+                return DeliveryModeController.GetCurrentMode()
+            end)
+
+            if ok then
+                return currentMode
+            end
+        end
+
+        return nil
+    end
+
+    local function chooseHighRiskMode()
+        if not JobsController then
+            warnLog("JobsController unavailable; cannot start Delivery through the updated job flow")
+            return false
+        end
+
+        local button = getHighRiskModeButton()
+        if not button then
+            local ok, err = pcall(function()
+                JobsController.RequestStartJobSession("Delivery", "jobPad")
+            end)
+
+            if not ok then
+                warnLog("could not open Delivery mode prompt:", err)
+                return false
+            end
+
+            button = waitForHighRiskModeButton(CONFIG.StartTimeout)
+        end
+
+        if not button then
+            warnLog("Hard delivery mode prompt did not appear")
+            return false
+        end
+
+        if not clickGuiWithFallback(button) then
+            warnLog("could not select Hard delivery mode")
+            return false
+        end
+
+        log("selected HighRisk delivery mode")
+        return true
     end
 
     local function getCharacter()
@@ -634,19 +833,82 @@ local function AutoDelivery()
     local function ensureDeliveryJob()
         local jobId = LocalPlayer:GetAttribute("JobId")
 
+        if jobId == "Delivery" and getDeliveryMode() ~= HIGH_RISK_MODE then
+            log("restarting Delivery job in HighRisk mode")
+
+            if not JobsController then
+                warnLog("JobsController unavailable; cannot restart Delivery job")
+                return false
+            end
+
+            local ok, err = pcall(function()
+                JobsController.RequestEndJobSession("jobPad")
+            end)
+
+            if not ok then
+                warnLog("could not end current Delivery job:", err)
+                return false
+            end
+
+            waitFor(function()
+                return LocalPlayer:GetAttribute("JobId") ~= "Delivery"
+            end, CONFIG.StartTimeout)
+            jobId = LocalPlayer:GetAttribute("JobId")
+
+            if jobId == "Delivery" then
+                warnLog("current Delivery job did not end")
+                return false
+            end
+        end
+
         if jobId and jobId ~= "Delivery" and CONFIG.QuitOtherJobs then
             log("ending current job:", jobId)
-            RequestEndJobSession:FireServer("jobPad")
-            task.wait(1)
+
+            if not JobsController then
+                warnLog("JobsController unavailable; cannot end current job")
+                return false
+            end
+
+            local ok, err = pcall(function()
+                JobsController.RequestEndJobSession("jobPad")
+            end)
+
+            if not ok then
+                warnLog("could not end current job:", err)
+                return false
+            end
+
+            waitFor(function()
+                return LocalPlayer:GetAttribute("JobId") ~= jobId
+            end, CONFIG.StartTimeout)
+            jobId = LocalPlayer:GetAttribute("JobId")
+
+            if jobId ~= nil then
+                warnLog("current job did not end")
+                return false
+            end
         end
 
         if LocalPlayer:GetAttribute("JobId") ~= "Delivery" then
             log("starting Delivery job")
-            RequestStartJobSession:FireServer("Delivery", "jobPad")
+
+            if not chooseHighRiskMode() then
+                return false
+            end
 
             waitFor(function()
                 return LocalPlayer:GetAttribute("JobId") == "Delivery"
             end, CONFIG.StartTimeout)
+
+            if LocalPlayer:GetAttribute("JobId") ~= "Delivery" then
+                warnLog("Delivery job did not start")
+                return false
+            end
+        end
+
+        if LocalPlayer:GetAttribute("JobId") == "Delivery" and getDeliveryMode() ~= HIGH_RISK_MODE then
+            warnLog("Delivery started without confirming HighRisk mode")
+            return false
         end
 
         if getState() then
@@ -799,6 +1061,7 @@ local function AutoDelivery()
         return lastCompletedAt > completedBefore
     end
 
+    -- LOOPS
     task.spawn(function()
         log("started. Stop with: getgenv().DY_DELIVERY_FARM_ENABLED = false")
 
@@ -858,38 +1121,29 @@ task.spawn(function()
 
     local function checkAndStartJob()
         local currentMiles = tonumber(miles.Value) or 0
-        print("[System] กำลังเช็คระยะทาง... ปัจจุบันมี: " .. tostring(currentMiles) .. " Miles")
+        print("[System] à¸à¸³à¸¥à¸±à¸‡à¹€à¸Šà¹‡à¸„à¸£à¸°à¸¢à¸°à¸—à¸²à¸‡... à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™à¸¡à¸µ: " .. tostring(currentMiles) .. " Miles")
         
         if not EnableAutoFarm or currentMiles >= TargetMiles then
             if not EnableAutoFarm then
-                print("[System] AutoFarm ขับรถถูกตั้งค่าปิดไว้ กำลังข้ามไปรับงาน Delivery ทันที...")
+                print("[System] AutoFarm à¸‚à¸±à¸šà¸£à¸–à¸–à¸¹à¸à¸•à¸±à¹‰à¸‡à¸„à¹ˆà¸²à¸›à¸´à¸”à¹„à¸§à¹‰ à¸à¸³à¸¥à¸±à¸‡à¸‚à¹‰à¸²à¸¡à¹„à¸›à¸£à¸±à¸šà¸‡à¸²à¸™ Delivery à¸—à¸±à¸™à¸—à¸µ...")
             else
-                print("[System] ระยะทางครบ " .. tostring(TargetMiles) .. " Miles แล้ว! กำลังปิด AutoFarm และเริ่มส่งของ...")
+                print("[System] à¸£à¸°à¸¢à¸°à¸—à¸²à¸‡à¸„à¸£à¸š " .. tostring(TargetMiles) .. " Miles à¹à¸¥à¹‰à¸§! à¸à¸³à¸¥à¸±à¸‡à¸›à¸´à¸” AutoFarm à¹à¸¥à¸°à¹€à¸£à¸´à¹ˆà¸¡à¸ªà¹ˆà¸‡à¸‚à¸­à¸‡...")
             end
-            -- 1. ปิดออโต้ฟาร์ม (หยุด loop วาร์ป)
+            -- 1. à¸›à¸´à¸”à¸­à¸­à¹‚à¸•à¹‰à¸Ÿà¸²à¸£à¹Œà¸¡ (à¸«à¸¢à¸¸à¸” loop à¸§à¸²à¸£à¹Œà¸›)
             AutoFarm = false
             
-            -- 2. รีเซ็ตตัวละครให้ตายและเกิดใหม่
+            -- 2. à¸£à¸µà¹€à¸‹à¹‡à¸•à¸•à¸±à¸§à¸¥à¸°à¸„à¸£à¹ƒà¸«à¹‰à¸•à¸²à¸¢à¹à¸¥à¸°à¹€à¸à¸´à¸”à¹ƒà¸«à¸¡à¹ˆ
             local char = LocalPlayer.Character
             if char and char:FindFirstChild("Humanoid") then
                 char.Humanoid.Health = 0
                 LocalPlayer.CharacterAdded:Wait()
-                task.wait(1.5) -- รอโหลดแมพสักครู่
+                task.wait(1.5) -- à¸£à¸­à¹‚à¸«à¸¥à¸”à¹à¸¡à¸žà¸ªà¸±à¸à¸„à¸£à¸¹à¹ˆ
             end
 
-            -- 3. รันรีโมทเริ่มงาน
-            local Event = ReplicatedStorage:WaitForChild("Remotes", 5)
-            if Event then
-                local reqEvent = Event:WaitForChild("RequestStartJobSession", 5)
-                if reqEvent then
-                    reqEvent:FireServer("Delivery", "jobPad")
-                end
-            end
-            
-            -- 4. เรียกใช้ฟังก์ชัน Auto Delivery
+            -- 3. Start and run Auto Delivery
             AutoDelivery()
         else
-            print("[System] ระยะทางยังไม่ครบ " .. tostring(TargetMiles) .. " (ปัจจุบัน " .. tostring(currentMiles) .. ") ระบบ AutoFarm จะขับรถต่อไป...")
+            print("[System] à¸£à¸°à¸¢à¸°à¸—à¸²à¸‡à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸„à¸£à¸š " .. tostring(TargetMiles) .. " (à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™ " .. tostring(currentMiles) .. ") à¸£à¸°à¸šà¸š AutoFarm à¸ˆà¸°à¸‚à¸±à¸šà¸£à¸–à¸•à¹ˆà¸­à¹„à¸›...")
         end
     end
 
@@ -919,7 +1173,7 @@ end
 
 local function UpdateDescription()
 	local messages = string.format(
-		"💰 Cash : %s , 🚗 Miles : %s",
+		"ðŸ’° Cash : %s , ðŸš— Miles : %s",
 		FormatNumber(Cash.Value),
 		FormatNumber(Miles.Value)
 	)
