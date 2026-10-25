@@ -1,3 +1,13 @@
+-- ============================================================
+-- Delex - library only
+-- ไฟล์นี้ "ไม่" เปิด UI เอง มันคืนค่า Library ออกไป
+-- วิธีใช้:
+--   local Chunk = assert(loadstring(game:HttpGet("<url ของไฟล์นี้>")))
+--   local Library = Chunk()
+--   local Window = Library:CreateWindow({ Title = "Delex" })
+-- โลโก้/ธีม แก้ที่บล็อก LOGO ด้านล่าง
+-- ============================================================
+
 if getgenv().Nousigi then 
 	if game.CoreGui:FindFirstChild("Delex GUI") then
 		for i, v in ipairs(game.CoreGui:GetChildren()) do
@@ -2942,94 +2952,5 @@ end
 	return Main_Function
 end
 
--- ============================================================
--- RUN: รันไฟล์นี้ตรง ๆ ใน executor = หน้าต่างจะขึ้นเลย
--- ถ้าคุณโหลดไฟล์นี้ผ่าน loadstring แล้วอยากเรียก CreateWindow เอง
--- ให้ตั้ง getgenv().GravityHubManual = true ก่อนโหลด
--- ============================================================
-if not getgenv().GravityHubManual then
-	local State = getgenv().GravityState or {}
-	getgenv().GravityState = State
-
-	local Window = Library:CreateWindow({
-		Title = "Delex",
-		Subtitle = os.date("%d/%m/%Y")
-	})
-
-	local MainTab = Window:AddTab("Main")
-	local Left = MainTab:AddLeftGroupbox("Main")
-	local Right = MainTab:AddRightGroupbox("Right")
-
-	Left:AddLabel("ทดสอบ UI: โลโก้ / คอนโทรลทุกชนิด")
-
-	Left:AddToggle("DemoToggle", {
-		Text = "Demo Toggle",
-		Desc = "กดเพื่อทดสอบ",
-		Default = State.DemoToggle == true,
-		Callback = function(Value)
-			State.DemoToggle = Value
-			print("toggle:", Value)
-		end
-	})
-
-	Left:AddSlider("DemoSlider", {
-		Text = "Demo Slider",
-		Min = 0,
-		Max = 100,
-		Default = State.DemoSlider or 50,
-		Rouding = 1,
-		Callback = function(Value)
-			State.DemoSlider = Value
-			print("slider:", Value)
-		end
-	})
-
-	Left:AddDropdown("DemoDropdown", {
-		Text = "Demo Dropdown",
-		SubText = "เลือกได้อันเดียว",
-		Values = { "One", "Two", "Three" },
-		Default = State.DemoDropdown or "One",
-		Callback = function(Value)
-			State.DemoDropdown = Value
-			print("dropdown:", Value)
-		end
-	})
-
-	Left:AddInput("DemoInput", {
-		Text = "Demo Input",
-		Placeholder = "พิมพ์อะไรก็ได้",
-		Default = State.DemoInput or "",
-		Callback = function(Value)
-			State.DemoInput = Value
-			print("input:", Value)
-		end
-	})
-
-	Right:AddKeyBind({
-		Title = "Demo Keybind",
-		Default = "F",
-		Mode = "Toggle",
-		Callback = function(Active)
-			print("keybind:", Active)
-		end
-	})
-
-	Right:AddButton({
-		Text = "Demo Button",
-		Func = function()
-			Library:Notify({
-				Title = "Hello",
-				Description = "ปุ่มทำงาน",
-				Duration = 3
-			}, true)
-		end
-	})
-
-	Library:Notify({
-		Title = "Loaded",
-		Description = "UI พร้อมใช้งาน",
-		Duration = 3
-	}, true)
-end
 
 return Library
