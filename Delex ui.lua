@@ -261,6 +261,11 @@ Library.ToggleUI = function()
 	if Gui then
 		Gui.Enabled = Enabled
 	end
+	-- ปุ่มลอยบอกสถานะตาม (เขียว = เปิด)
+	local Refresh = getgenv().Delex and getgenv().Delex.RefreshToggleButton
+	if type(Refresh) == "function" then
+		pcall(Refresh)
+	end
 end
 getgenv().ToggleUI = Library.ToggleUI
 
@@ -781,7 +786,7 @@ local function MakeToggleButton()
 	ToggleLogo.Name = "Logo"
 	ToggleLogo.AnchorPoint = Vector2.new(0.5, 0.5)
 	ToggleLogo.Position = UDim2.new(0.5, 0, 0.5, 0)
-	ToggleLogo.Size = UDim2.new(1, -10, 1, -10)
+	ToggleLogo.Size = UDim2.new(1, -8, 1, -8)
 	ToggleLogo.BackgroundTransparency = 1
 	ToggleLogo.Image = getgenv().UIColor["Logo Image"]
 	ToggleLogo.ScaleType = Enum.ScaleType.Fit
@@ -791,6 +796,30 @@ local function MakeToggleButton()
 		ToggleLogo.Size = UDim2.new(1, -2, 1, -2)
 		ToggleLogo.ScaleType = Enum.ScaleType.Crop
 	end
+
+	-- วงแหวนบอกสถานะ: เขียว = UI เปิดอยู่, จาง = UI ถูกพับไว้
+	local StateDot = Instance.new("Frame", ToggleButton)
+	StateDot.Name = "StateDot"
+	StateDot.AnchorPoint = Vector2.new(1, 1)
+	StateDot.Position = UDim2.new(1, -3, 1, -3)
+	StateDot.Size = UDim2.new(0, 12, 0, 12)
+	StateDot.BackgroundColor3 = Color3.fromRGB(0, 215, 130)
+	StateDot.BorderSizePixel = 0
+	StateDot.ZIndex = 3
+
+	local DotCorner = Instance.new("UICorner", StateDot)
+	DotCorner.CornerRadius = UDim.new(1, 0)
+
+	local function RefreshStateDot()
+		if getgenv().UIToggled == false then
+			StateDot.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
+			StateDot.BackgroundTransparency = 0.35
+		else
+			StateDot.BackgroundColor3 = Color3.fromRGB(0, 215, 130)
+			StateDot.BackgroundTransparency = 0
+		end
+	end
+	RefreshStateDot()
 
 	-- กด = พับ/กาง UI, ลาก = ย้ายตำแหน่ง (จำตำแหน่งไว้ใน session)
 	local DragStart = nil
@@ -858,8 +887,16 @@ local function MakeToggleButton()
 			getgenv().DelexTogglePos = ToggleButton.Position
 		else
 			Library.ToggleUI()
+			RefreshStateDot()
 		end
 		Moved = false
+	end
+
+	-- ปิด/เปิดด้วยคีย์ลัดหรือปุ่มอื่น ก็ให้จุดสถานะอัปเดตตาม
+	if ToggleGui.AncestryChanged then
+		ToggleGui.AncestryChanged:Connect(function()
+			RefreshStateDot()
+		end)
 	end
 
 	ToggleButton.InputEnded:Connect(function(Input)
@@ -887,6 +924,7 @@ local function MakeToggleButton()
 	getgenv().Delex.ToggleButton = ToggleButton
 	getgenv().Delex.ToggleStroke = ToggleStroke
 	getgenv().Delex.GuiParent = GuiParent
+	getgenv().Delex.RefreshToggleButton = RefreshStateDot
 end
 
 	-- สร้างปุ่มพับ UI ทันที (ถ้ามีอยู่แล้วจะไม่สร้างซ้ำ)
