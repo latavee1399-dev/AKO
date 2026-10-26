@@ -8,9 +8,63 @@
 -- โลโก้/ธีม แก้ที่บล็อก LOGO ด้านล่าง
 -- ============================================================
 
+-- ============================================================
+-- compat: รองรับ executor ที่ไม่มี getgenv / get_hui / task
+-- ============================================================
+if type(getgenv) ~= "function" then
+	function getgenv()
+		return _G
+	end
+end
+
+-- เลือก container ที่เอา ScreenGui ไปแปะได้จริง (บาง executor ไม่ให้เขียน CoreGui)
+local function ResolveGuiParent()
+	local Candidates = {}
+
+	local OkHui, Hui = pcall(function()
+		return gethui and gethui()
+	end)
+	if OkHui and typeof and typeof(Hui) == "Instance" then
+		table.insert(Candidates, Hui)
+	elseif OkHui and Hui ~= nil then
+		table.insert(Candidates, Hui)
+	end
+
+	local OkCore, CoreGui = pcall(function()
+		return game:GetService("CoreGui")
+	end)
+	if OkCore and CoreGui then
+		table.insert(Candidates, CoreGui)
+	end
+
+	local OkPlayer, PlayerGui = pcall(function()
+		return game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui", 10)
+	end)
+	if OkPlayer and PlayerGui then
+		table.insert(Candidates, PlayerGui)
+	end
+
+	for _, Parent in ipairs(Candidates) do
+		local Ok, Test = pcall(function()
+			local Probe = Instance.new("ScreenGui")
+			Probe.Name = "DelexProbe"
+			Probe.Parent = Parent
+			Probe:Destroy()
+			return true
+		end)
+		if Ok and Test then
+			return Parent
+		end
+	end
+
+	return nil
+end
+
+local GuiParent = ResolveGuiParent()
+
 if getgenv().Nousigi then 
-	if game.CoreGui:FindFirstChild("Delex GUI") then
-		for i, v in ipairs(game.CoreGui:GetChildren()) do
+	if GuiParent and GuiParent:FindFirstChild("Delex GUI") then
+		for i, v in ipairs(GuiParent:GetChildren()) do
 			if string.find(v.Name,  "Delex") then
 				v:Destroy()
 			end
@@ -20,9 +74,11 @@ end
 getgenv().Nousigi = true
 
 -- เก็บกวาด UI ชื่อเก่า (Gravity Hub) ที่ยังค้างจากเวอร์ชันก่อน ถ้ามี
-for _, Gui in ipairs(game:GetService("CoreGui"):GetChildren()) do
-	if string.find(Gui.Name, "Gravity Hub", 1, true) then
-		Gui:Destroy()
+if GuiParent then
+	for _, Gui in ipairs(GuiParent:GetChildren()) do
+		if string.find(Gui.Name, "Gravity Hub", 1, true) then
+			Gui:Destroy()
+		end
 	end
 end
 
@@ -43,40 +99,40 @@ local LOGO_ASPECT = nil
 local LOGO_NATIVE_ID = "rbxassetid://85591093437630"
 
 local T1UIColor = {
-	["Border Color"] = Color3.fromRGB(255, 0, 0),
+	["Border Color"] = Color3.fromRGB(0, 140, 255),
 	["Click Effect Color"] = Color3.fromRGB(230, 230, 230),
 	["Setting Icon Color"] = Color3.fromRGB(230, 230, 230),
 	["Logo Image"] = LOGO_IMAGE,
 	["Logo Url"] = LOGO_URL,
 	["Logo Aspect"] = LOGO_ASPECT,
 	["Search Icon Color"] = Color3.fromRGB(240, 240, 230),
-	["Search Icon Highlight Color"] = Color3.fromRGB(255, 0, 0),
+	["Search Icon Highlight Color"] = Color3.fromRGB(0, 140, 255),
 	["GUI Text Color"] = Color3.fromRGB(235, 235, 230),
 	["Text Color"] = Color3.fromRGB(235, 235, 230),
 	["Placeholder Text Color"] = Color3.fromRGB(170, 170, 160),
-	["Title Text Color"] = Color3.fromRGB(255, 0, 0),
-	["Background Main Color"] = Color3.fromRGB(18, 18, 22),
-	["Background 1 Color"] = Color3.fromRGB(28, 28, 34),
+	["Title Text Color"] = Color3.fromRGB(0, 140, 255),
+	["Background Main Color"] = Color3.fromRGB(14, 20, 32),
+	["Background 1 Color"] = Color3.fromRGB(24, 32, 46),
 	["Background 1 Transparency"] = 0.1,
-	["Background 2 Color"] = Color3.fromRGB(38, 38, 46),
-	["Background 3 Color"] = Color3.fromRGB(48, 48, 56),
+	["Background 2 Color"] = Color3.fromRGB(34, 44, 62),
+	["Background 3 Color"] = Color3.fromRGB(44, 56, 78),
 	["Background Image"] = "",
-	["Page Selected Color"] = Color3.fromRGB(255, 0, 0),
+	["Page Selected Color"] = Color3.fromRGB(0, 140, 255),
 	["Section Text Color"] = Color3.fromRGB(220, 220, 210),
-	["Section Underline Color"] = Color3.fromRGB(255, 0, 0),
-	["Toggle Border Color"] = Color3.fromRGB(255, 0, 0),
+	["Section Underline Color"] = Color3.fromRGB(0, 140, 255),
+	["Toggle Border Color"] = Color3.fromRGB(0, 140, 255),
 	["Toggle Checked Color"] = Color3.fromRGB(230, 230, 230),
 	["Toggle Desc Color"] = Color3.fromRGB(185, 185, 185),
-	["Button Color"] = Color3.fromRGB(255, 0, 0),
-	["Label Color"] = Color3.fromRGB(38, 38, 42),
+	["Button Color"] = Color3.fromRGB(0, 140, 255),
+	["Label Color"] = Color3.fromRGB(34, 44, 62),
 	["Dropdown Icon Color"] = Color3.fromRGB(230, 230, 230),
-	["Dropdown Selected Color"] = Color3.fromRGB(255, 0, 0),
-	["Dropdown Selected Check Color"] = Color3.fromRGB(170, 0, 0),
+	["Dropdown Selected Color"] = Color3.fromRGB(0, 140, 255),
+	["Dropdown Selected Check Color"] = Color3.fromRGB(0, 75, 160),
 	["Dropdown Selected Text Color"] = Color3.fromRGB(255, 255, 255),
-	["Textbox Highlight Color"] = Color3.fromRGB(255, 0, 0),
-	["Box Highlight Color"] = Color3.fromRGB(255, 0, 0),
-	["Slider Line Color"] = Color3.fromRGB(255, 0, 0),
-	["Slider Highlight Color"] = Color3.fromRGB(200, 0, 0),
+	["Textbox Highlight Color"] = Color3.fromRGB(0, 140, 255),
+	["Box Highlight Color"] = Color3.fromRGB(0, 140, 255),
+	["Slider Line Color"] = Color3.fromRGB(0, 140, 255),
+	["Slider Highlight Color"] = Color3.fromRGB(0, 100, 210),
 	["Tween Animation 1 Speed"] = DisableAnimation and 0 or 0.25,
 	["Tween Animation 2 Speed"] = DisableAnimation and 0 or 0.5,
 	["Tween Animation 3 Speed"] = DisableAnimation and 0 or 0.1,
@@ -163,9 +219,25 @@ Library_Function.Gui.Name = 'Delex GUI'
 Library_Function.Gui.Enabled = true
 
 getgenv().ReadyForGuiLoaded = false
-spawn(function()
+local Spawn = spawn or (task and task.spawn) or function(Fn)
+	coroutine.wrap(Fn)()
+end
+local TaskWait = (task and task.wait) or wait or function(Seconds)
+	-- fallback สุดท้าย: ไม่มี task.wait และไม่มี wait
+	local Deadline = os.clock() + (Seconds or 0)
 	repeat
-		task.wait()
+		RunService.Heartbeat:Wait()
+	until os.clock() >= Deadline
+end
+local function Now()
+	if type(tick) == "function" then
+		return tick()
+	end
+	return os.clock()
+end
+Spawn(function()
+	repeat
+		TaskWait()
 	until getgenv().ReadyForGuiLoaded
 	if getgenv().UIToggled then
 		Library_Function.Gui.Enabled = true
@@ -183,7 +255,7 @@ Library.ToggleUI = function()
 	if Now - (getgenv().LastUIToggle or 0) < 0.15 then return end
 	getgenv().LastUIToggle = Now
 
-	local Gui = game:GetService("CoreGui"):FindFirstChild("Delex GUI")
+	local Gui = GuiParent and GuiParent:FindFirstChild("Delex GUI")
 	local Enabled = not (Gui and Gui.Enabled)
 	getgenv().UIToggled = Enabled
 	if Gui then
@@ -193,21 +265,257 @@ end
 getgenv().ToggleUI = Library.ToggleUI
 
 
--- right ctrl toggles the whole ui, one handler only even after re-running the script
+-- ============================================================
+-- keybind สำหรับพับ/กาง UI (เปลี่ยนได้ผ่าน Library:SetToggleKey)
+-- ============================================================
+getgenv().DelexToggleKey = getgenv().DelexToggleKey or "RightControl"
+
+local function KeyName(Key)
+	local Text = tostring(Key or "")
+	Text = Text:gsub("Enum%.KeyCode%.", "")
+	Text = Text:gsub("Enum%.UserInputType%.", "")
+	return Text
+end
+
+function Library:SetToggleKey(Key)
+	getgenv().DelexToggleKey = KeyName(Key)
+	return getgenv().DelexToggleKey
+end
+
+function Library:GetToggleKey()
+	return getgenv().DelexToggleKey
+end
+
+-- one handler only even after re-running the script
 if getgenv().GravityHubKeybind then
 	pcall(function()
 		getgenv().GravityHubKeybind:Disconnect()
 	end)
 end
 getgenv().GravityHubKeybind = uis.InputBegan:Connect(function(Input)
-	if Input.KeyCode ~= Enum.KeyCode.RightControl then return end
-	if uis:GetFocusedTextBox() then return end
+	local Wanted = KeyName(getgenv().DelexToggleKey)
+	if Wanted == "" then
+		return
+	end
+	local Pressed
+	if Input.UserInputType == Enum.UserInputType.Keyboard then
+		Pressed = Input.KeyCode.Name
+	elseif Input.UserInputType == Enum.UserInputType.MouseButton1 then
+		Pressed = "MouseLeft"
+	elseif Input.UserInputType == Enum.UserInputType.MouseButton2 then
+		Pressed = "MouseRight"
+	end
+	if Pressed ~= Wanted then
+		return
+	end
+	if uis:GetFocusedTextBox() then
+		return
+	end
 	Library.ToggleUI()
 end)
 
+-- ============================================================
+-- theme registry: ทุกคอนโทรลลงทะเบียน element ไว้ เพื่อเปลี่ยนสีสดได้ทันที
+-- ============================================================
+local Themes = nil
+local ThemeNames = {}
+local CurrentTheme = getgenv().DelexThemeName or "Blue"
+local ThemeWatchers = {}
+
+-- forward declaration: ApplyTheme เรียกใช้ก่อนที่ตัวจริงจะถูกประกาศ
+local RegisterThemeTree
+
+local function RegisterTheme(Element, Property, Key)
+	table.insert(ThemeWatchers, {
+		Element = Element,
+		Property = Property,
+		Key = Key
+	})
+end
+
+local function ApplyWatcher(Entry)
+	local Value = getgenv().UIColor[Entry.Key]
+	if Value == nil then
+		return
+	end
+	pcall(function()
+		Entry.Element[Entry.Property] = Value
+	end)
+end
+
+function Library:ApplyTheme(ColorTable)
+	if type(ColorTable) ~= "table" then
+		return false
+	end
+	for Key, Value in pairs(ColorTable) do
+		getgenv().UIColor[Key] = Value
+	end
+
+	-- เดินสำรวจ GUI จริงทั้งหมด เพราะคอนโทรลถูกเพิ่มเข้า section ทีหลัง
+	for _, Gui in ipairs({ Library_Function.Gui, Library_Function.NotiGui }) do
+		if Gui then
+			RegisterThemeTree(Gui)
+		end
+	end
+
+	for _, Entry in ipairs(ThemeWatchers) do
+		ApplyWatcher(Entry)
+	end
+
+	-- element ที่ไม่ใช่ descendant ของ Gui (เช่นปุ่มลอย)
+	local Stroke = Library_Function.ToggleStroke
+	if Stroke and getgenv().UIColor["Border Color"] then
+		pcall(function()
+			Stroke.Color = getgenv().UIColor["Border Color"]
+		end)
+	end
+
+	for _, Callback in ipairs(ThemeBuckets or {}) do
+		pcall(Callback, getgenv().UIColor)
+	end
+	return true
+end
+
+function Library:GetTheme()
+	return getgenv().UIColor
+end
+
+function Library:GetThemeName()
+	return getgenv().DelexThemeName or "Custom"
+end
+
+function Library:GetThemeNames()
+	local List = {}
+	for Name in pairs(Themes or {}) do
+		table.insert(List, Name)
+	end
+	table.sort(List)
+	return List
+end
+
+function Library:RegisterTheme(Name, ColorTable)
+	Themes = Themes or {}
+	Themes[Name] = ColorTable
+	table.insert(ThemeNames, Name)
+	return true
+end
+
+function Library:SetTheme(Name)
+	Themes = Themes or {}
+	local ColorTable = Themes[Name]
+	if type(ColorTable) ~= "table" then
+		return false
+	end
+	getgenv().DelexThemeName = Name
+	return Library:ApplyTheme(ColorTable)
+end
+
+-- callback สำหรับ element ที่สร้างนอก registry (เรียกซ้ำเมื่อธีมเปลี่ยน)
+ThemeBuckets = ThemeBuckets or {}
+function Library:OnThemeChanged(Callback)
+	if type(Callback) == "function" then
+		table.insert(ThemeBuckets, Callback)
+	end
+end
+
+-- ลงทะเบียน element ตามชื่อที่ไลบรารีนี้ใช้อยู่แล้ว
+-- (เรียกหลังสร้างคอนโทรลเสร็จ เพื่อให้เปลี่ยนสีสดได้โดยไม่ต้องสร้าง UI ใหม่)
+RegisterThemeTree = function(Root)
+	if not Root then
+		return
+	end
+	local function Walk(Target)
+		local Name = Target.Name
+		if Name == "TextColor" or Name == "GUITextColor" or Name == "SampleItemTitle" then
+			RegisterTheme(Target, "TextColor3", "Text Color")
+		elseif Name == "Sectiontitle" then
+			RegisterTheme(Target, "TextColor3", "Section Text Color")
+		elseif Name == "ToggleDesc" then
+			RegisterTheme(Target, "TextColor3", "Toggle Desc Color")
+		elseif Name == "PageInLine" then
+			RegisterTheme(Target, "BackgroundColor3", "Page Selected Color")
+		elseif Name == "Linesec" then
+			RegisterTheme(Target, "BackgroundColor3", "Section Underline Color")
+		elseif Name == "check" then
+			RegisterTheme(Target, "BackgroundColor3", "Toggle Checked Color")
+		elseif Name == "checkbox" then
+			RegisterTheme(Target, "ImageColor3", "Toggle Border Color")
+		elseif Name == "Bar" then
+			RegisterTheme(Target, "BackgroundColor3", "Slider Line Color")
+		elseif Name == "ImgDrop" then
+			RegisterTheme(Target, "ImageColor3", "Dropdown Icon Color")
+		elseif Name == "TextNSBoxLineeeee" then
+			RegisterTheme(Target, "BackgroundColor3", "Box Highlight Color")
+		elseif Name == "Background1" then
+			RegisterTheme(Target, "BackgroundColor3", "Background 1 Color")
+		elseif Name == "Background2" then
+			RegisterTheme(Target, "BackgroundColor3", "Background 2 Color")
+		elseif Name == "LabelBG" then
+			RegisterTheme(Target, "BackgroundColor3", "Label Color")
+		elseif Name == "TopStroke" then
+			RegisterTheme(Target, "BackgroundColor3", "Border Color")
+		end
+		for _, Child in ipairs(Target:GetChildren()) do
+			Walk(Child)
+		end
+	end
+	Walk(Root)
+end
+Library_Function.RegisterThemeTree = RegisterThemeTree
+
+-- ธีมสำเร็จรูป: เปลี่ยนเฉพาะสีเน้น (พื้นหลังคงไว้ให้อ่านง่าย)
+local function MakeTheme(Accent, AccentDark, AccentDeep)
+	return {
+		["Border Color"] = Accent,
+		["Search Icon Highlight Color"] = Accent,
+		["Title Text Color"] = Accent,
+		["Page Selected Color"] = Accent,
+		["Section Underline Color"] = Accent,
+		["Toggle Border Color"] = Accent,
+		["Button Color"] = Accent,
+		["Dropdown Selected Color"] = Accent,
+		["Textbox Highlight Color"] = Accent,
+		["Box Highlight Color"] = Accent,
+		["Slider Line Color"] = Accent,
+		["Slider Highlight Color"] = AccentDark,
+		["Dropdown Selected Check Color"] = AccentDeep or AccentDark,
+	}
+end
+
+Library:RegisterTheme("Blue", MakeTheme(
+	Color3.fromRGB(0, 140, 255),
+	Color3.fromRGB(0, 100, 210),
+	Color3.fromRGB(0, 75, 160)
+))
+Library:RegisterTheme("Red", MakeTheme(
+	Color3.fromRGB(255, 0, 0),
+	Color3.fromRGB(200, 0, 0),
+	Color3.fromRGB(170, 0, 0)
+))
+Library:RegisterTheme("Green", MakeTheme(
+	Color3.fromRGB(0, 220, 130),
+	Color3.fromRGB(0, 170, 100),
+	Color3.fromRGB(0, 130, 80)
+))
+Library:RegisterTheme("Purple", MakeTheme(
+	Color3.fromRGB(170, 90, 255),
+	Color3.fromRGB(130, 60, 210),
+	Color3.fromRGB(100, 40, 170)
+))
+Library:RegisterTheme("Orange", MakeTheme(
+	Color3.fromRGB(255, 150, 40),
+	Color3.fromRGB(210, 110, 20),
+	Color3.fromRGB(170, 85, 15)
+))
+Library:RegisterTheme("White", MakeTheme(
+	Color3.fromRGB(235, 235, 230),
+	Color3.fromRGB(200, 200, 195),
+	Color3.fromRGB(170, 170, 165)
+))
+
 Library.DestroyUI = function()
-	if game.CoreGui:FindFirstChild("Delex GUI") then
-		for i, v in ipairs(game.CoreGui:GetChildren()) do
+	if GuiParent then
+		for i, v in ipairs(GuiParent:GetChildren()) do
 			if string.find(v.Name,  "Delex") then
 				v:Destroy()
 			end
@@ -235,8 +543,8 @@ NotiList.VerticalAlignment = Enum.VerticalAlignment.Bottom
 NotiList.Padding = UDim.new(0, 5)
 
 
-Library_Function.Gui.Parent = game:GetService('CoreGui')
-Library_Function.NotiGui.Parent = game:GetService('CoreGui')
+Library_Function.Gui.Parent = GuiParent
+Library_Function.NotiGui.Parent = GuiParent
 
 function Library_Function.Getcolor(color)
 	return {
@@ -368,7 +676,7 @@ local libCreateNoti = function(Setting)
 		TweenService:Create(Noticontainer, TweenInfo.new(getgenv().UIColor["Tween Animation 1 Speed"]), {
 			Position = UDim2.new(1, 0, 0, 0)
 		}):Play()
-		wait(.25)
+		TaskWait(.25)
 		NotiFrame:Destroy()
 	end
 
@@ -389,12 +697,12 @@ local libCreateNoti = function(Setting)
 	end)
 
 	TextButton.MouseButton1Click:Connect(function()
-		wait(.25)
+		TaskWait(.25)
 		remove()
 	end)
 
-	spawn(function()
-		wait(Duration)
+	Spawn(function()
+		TaskWait(Duration)
 		remove()
 	end)
 
@@ -424,20 +732,28 @@ function Library:CreateWindow(Setting)
     end
     Library_Function.LoadLogo()
 
-	-- floating toggle: rounded dark square with the logo inside
+-- ============================================================
+-- floating toggle: ปุ่มลอยสำหรับพับ/กาง UI
+-- ตำแหน่งเป็น Control ฝั่งซ้ายของจอ และกดลากย้ายได้
+-- ============================================================
+local function MakeToggleButton()
+	if getgenv().DelexToggleButton and getgenv().DelexToggleButton.Parent then
+		return
+	end
+
 	local ToggleGui = Instance.new("ScreenGui")
 	ToggleGui.Name = "Delex Toggle"
 	ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	ToggleGui.ResetOnSpawn = false
-	ToggleGui.Parent = game:GetService("CoreGui")
 
+	local SavedPos = getgenv().DelexTogglePos
 	local ToggleButton = Instance.new("TextButton")
 	ToggleButton.Name = "ToggleButton"
 	ToggleButton.Parent = ToggleGui
-	ToggleButton.AnchorPoint = Vector2.new(0.5, 0)
-	ToggleButton.Position = UDim2.new(0.5, 0, 0, 12)
+	ToggleButton.AnchorPoint = SavedPos and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5)
+	ToggleButton.Position = SavedPos or UDim2.new(0, 10, 0.5, 0)
 	ToggleButton.Size = UDim2.new(0, 46, 0, 46)
-	ToggleButton.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+	ToggleButton.BackgroundColor3 = Color3.fromRGB(10, 16, 26)
 	ToggleButton.BackgroundTransparency = 0.35
 	ToggleButton.AutoButtonColor = false
 	ToggleButton.Text = ""
@@ -446,6 +762,7 @@ function Library:CreateWindow(Setting)
 	ToggleCorner.CornerRadius = UDim.new(0, 12)
 
 	local ToggleStroke = Instance.new("UIStroke", ToggleButton)
+	ToggleStroke.Name = "DelexStroke"
 	ToggleStroke.Color = getgenv().UIColor["Border Color"]
 	ToggleStroke.Thickness = 1.5
 	ToggleStroke.Transparency = 0.2
@@ -465,10 +782,76 @@ function Library:CreateWindow(Setting)
 		ToggleLogo.ScaleType = Enum.ScaleType.Crop
 	end
 
-	ToggleButton.MouseButton1Click:Connect(function()
-		Library.ToggleUI()
+	-- กด = พับ/กาง UI, ลาก = ย้ายตำแหน่ง (จำตำแหน่งไว้ใน session)
+	local DragStart = nil
+	local DragOrigin = nil
+	local Moved = false
+
+	ToggleButton.InputBegan:Connect(function(Input)
+		if Input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and Input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		DragStart = Input.Position
+		DragOrigin = ToggleButton.Position
+		Moved = false
 	end)
-    
+
+	ToggleButton.InputChanged:Connect(function(Input)
+		if not DragStart then
+			return
+		end
+		if Input.UserInputType ~= Enum.UserInputType.MouseMovement
+			and Input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		local Delta = Input.Position - DragStart
+		if math.abs(Delta.X) + math.abs(Delta.Y) > 4 then
+			Moved = true
+		end
+		if Moved then
+			ToggleButton.AnchorPoint = Vector2.new(0.5, 0.5)
+			ToggleButton.Position = UDim2.new(
+				DragOrigin.X.Scale, DragOrigin.X.Offset + Delta.X,
+				DragOrigin.Y.Scale, DragOrigin.Y.Offset + Delta.Y
+			)
+		end
+	end)
+
+	local function EndDrag()
+		if not DragStart then
+			return
+		end
+		DragStart = nil
+		if Moved then
+			getgenv().DelexTogglePos = ToggleButton.Position
+		else
+			Library.ToggleUI()
+		end
+		Moved = false
+	end
+
+	ToggleButton.InputEnded:Connect(function(Input)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1
+			or Input.UserInputType == Enum.UserInputType.Touch then
+			EndDrag()
+		end
+	end)
+
+	ToggleGui.Parent = GuiParent
+	getgenv().DelexToggleButton = ToggleButton
+	Library_Function.ToggleButton = ToggleButton
+	Library_Function.ToggleStroke = ToggleStroke
+
+	-- ให้ API เปลี่ยนสี/คีย์ลัด หาปุ่มนี้เจอ
+	getgenv().Delex = getgenv().Delex or {}
+	getgenv().Delex.ToggleButton = ToggleButton
+	getgenv().Delex.ToggleStroke = ToggleStroke
+end
+
+	-- สร้างปุ่มพับ UI ทันที (ถ้ามีอยู่แล้วจะไม่สร้างซ้ำ)
+	MakeToggleButton()
+
 	local djtmemay = false
 	cac = false
 
@@ -518,12 +901,12 @@ function Library:CreateWindow(Setting)
 	MainContainer = Instance.new("ImageLabel")
 	MainContainer.Name = "MainContainer"
 	MainContainer.Parent = Main
-	MainContainer.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+	MainContainer.BackgroundColor3 = Color3.fromRGB(14, 20, 32)
 	MainContainer.Size = UDim2.new(1, 0, 1, 0)
 
 	local uistr = Instance.new("UIStroke", MainContainer);
 	uistr.Thickness = 1;
-	uistr.Color = Color3.fromRGB(96, 0, 0);
+	uistr.Color = Color3.fromRGB(0, 45, 95);
 
 	local uigradient = Instance.new("UIGradient", MainContainer);
 	uigradient.Color = ColorSequence.new{
@@ -565,7 +948,7 @@ function Library:CreateWindow(Setting)
 	
 	local TopStroke = Instance.new("Frame", TopMain)
 	TopStroke.Name = "TopStroke"
-	TopStroke.BackgroundColor3 = Color3.fromRGB(96, 0, 0)
+	TopStroke.BackgroundColor3 = Color3.fromRGB(0, 45, 95)
 	TopStroke.BackgroundTransparency = 0.6
 	TopStroke.BorderSizePixel = 0
 	TopStroke.Position = UDim2.new(0, 0, 1, -1)
@@ -670,17 +1053,17 @@ function Library:CreateWindow(Setting)
 	PageControl.Parent = Concacmain
 	PageControl.Position = UDim2.new(0, 5, 0, 5)
 	PageControl.Size = UDim2.new(0, 150, 1, -10)
-	PageControl.BackgroundColor3 = Color3.fromRGB(70, 70, 82)
+	PageControl.BackgroundColor3 = Color3.fromRGB(30, 42, 62)
 	PageControl.BackgroundTransparency = 0.3
 
 	local pageControlStroke = Instance.new("UIStroke", PageControl)
-	pageControlStroke.Color = Color3.fromRGB(96, 0, 0)
+	pageControlStroke.Color = Color3.fromRGB(0, 45, 95)
 	pageControlStroke.Thickness = 1
 
 	local pageControlGradient = Instance.new("UIGradient", PageControl)
 	pageControlGradient.Color = ColorSequence.new{
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(70, 70, 82)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(84, 84, 98))
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 42, 62)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(44, 58, 82))
 	}
 	pageControlGradient.Rotation = 90
 	pageControlGradient.Transparency = NumberSequence.new{
@@ -755,6 +1138,31 @@ function Library:CreateWindow(Setting)
 	local LayoutOrderBut = -1
 	local LayoutOrder = -1
 	local PageCounter = 1
+
+	-- จัดลำดับแท็บ: ใช้ Window.layoutOrder.Set("Muse", "Settings")
+	-- แท็บที่ระบุจะถูกตรึงไว้ล่างสุดเสมอ (ไม่ว่าแท็บอื่นจะถูกเพิ่มกี่แท็บ)
+	local LayoutPinBase = 1000
+	local layoutOrder = {}
+
+	function layoutOrder.Set(...)
+		local Pinned = 0
+		for _, Name in ipairs({ ... }) do
+			local Target = ControlList:FindFirstChild(tostring(Name) .. "_Control")
+			if Target then
+				Pinned = Pinned + 1
+				Target.LayoutOrder = LayoutPinBase + Pinned
+			end
+		end
+		return Pinned
+	end
+
+	setmetatable(layoutOrder, {
+		__call = function(_, ...)
+			return layoutOrder.Set(...)
+		end
+	})
+
+	Main_Function.layoutOrder = layoutOrder
 
 	function Main_Function:AddTab(PageName)
 
@@ -889,6 +1297,11 @@ function Library:CreateWindow(Setting)
 			InLine.BackgroundTransparency = 0
 		end
 
+		-- ลงทะเบียนสีของแท็บนี้ เพื่อให้เปลี่ยนธีมแล้วอัปเดตทันที
+		if Library_Function.RegisterThemeTree then
+			Library_Function.RegisterThemeTree(Frame)
+		end
+
 		PageButton.MouseButton1Click:Connect(function()
 			if tostring(UIPage.CurrentPage) == PageContainer.Name then 
 				return
@@ -943,18 +1356,18 @@ function Library:CreateWindow(Setting)
 			Section.Name = Section_Name .. "_Dot"
 			Section.Parent = PageList
 			Section.Size = UDim2.new(1, -5, 0, 30)
-			Section.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+			Section.BackgroundColor3 = Color3.fromRGB(44, 56, 78)
 			Section.BackgroundTransparency = 0.55
 			Section.ClipsDescendants = true
 
 			local sectionStroke = Instance.new("UIStroke", Section)
-			sectionStroke.Color = Color3.fromRGB(96, 0, 0)
+			sectionStroke.Color = Color3.fromRGB(0, 45, 95)
 			sectionStroke.Thickness = 1
 
 			local sectionGradient = Instance.new("UIGradient", Section)
 			sectionGradient.Color = ColorSequence.new{
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(38, 38, 46)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(48, 48, 56))
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(34, 44, 62)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(44, 56, 78))
 			}
 			sectionGradient.Rotation = 90
 			sectionGradient.Transparency = NumberSequence.new{
@@ -1034,7 +1447,7 @@ function Library:CreateWindow(Setting)
 				VisibilitySectionFrame.Name = "VisibilitySectionFrame"
 				VisibilitySectionFrame.Parent = Topsec
 				VisibilitySectionFrame.AnchorPoint = Vector2.new(1, 0.5)
-				VisibilitySectionFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+				VisibilitySectionFrame.BackgroundColor3 = Color3.fromRGB(18, 26, 40)
 				VisibilitySectionFrame.BorderSizePixel = 0
 				VisibilitySectionFrame.Position = UDim2.new(1, -5, 0.5, 0)
 				VisibilitySectionFrame.Size = UDim2.new(0, 20, 0, 20)
@@ -1106,6 +1519,11 @@ function Library:CreateWindow(Setting)
 					Section.Size = UDim2.new(1, -5, 0, SizeSectionY)
 				end
 			end)
+
+			-- เก็บสีของ section ไว้ให้ระบบธีมอัปเดต
+			if Library_Function.RegisterThemeTree then
+				Library_Function.RegisterThemeTree(Section)
+			end
 			local sectionFunction = {}
 			function sectionFunction:AddToggle(idk,Setting)
 				local Title = tostring(Setting.Text or Setting.Title) or ""
@@ -1152,7 +1570,7 @@ function Library:CreateWindow(Setting)
 				check.Name = "check"
 				check.Parent = checkbox
 				check.AnchorPoint = Vector2.new(0.5, 0.5)
-				check.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+				check.BackgroundColor3 = Color3.fromRGB(0, 140, 255)
 				check.Position = UDim2.new(0.5, 0, 0.5, 0)
 				local cac = 5
 				if Desc then
@@ -1314,7 +1732,7 @@ function Library:CreateWindow(Setting)
              ClickArea_1.Name = "ClickArea"
              ClickArea_1.Parent = RowBG_1
              ClickArea_1.AnchorPoint = Vector2.new(1, 0.5)
-             ClickArea_1.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+             ClickArea_1.BackgroundColor3 = Color3.fromRGB(0, 140, 255)
              ClickArea_1.Position = UDim2.new(1, -8,0.5, 0)
              ClickArea_1.Size = UDim2.new(0, 94,0, 30)
              ClickArea_1.ClipsDescendants = true
@@ -1324,10 +1742,10 @@ function Library:CreateWindow(Setting)
              
              UIGradient_1.Parent = ClickArea_1
              UIGradient_1.Color = ColorSequence.new{
-                 ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 90, 90)), 
-                 ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 0, 0)), 
-                 ColorSequenceKeypoint.new(0.6, Color3.fromRGB(210, 0, 0)), 
-                 ColorSequenceKeypoint.new(1, Color3.fromRGB(170, 0, 0))
+                 ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 175, 255)), 
+                 ColorSequenceKeypoint.new(0.4, Color3.fromRGB(0, 140, 255)), 
+                 ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0, 105, 215)), 
+                 ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 75, 160))
              }
              UIGradient_1.Rotation = 90
              
@@ -1456,7 +1874,7 @@ function Library:CreateWindow(Setting)
                 LabelBG.Parent = LabelFrame
                 LabelBG.AnchorPoint = Vector2.new(0.5, 0)
                 LabelBG.AutomaticSize = Enum.AutomaticSize.Y
-                LabelBG.BackgroundColor3 = Color3.fromRGB(38,38,46)
+                LabelBG.BackgroundColor3 = Color3.fromRGB(34, 44, 62)
                 LabelBG.BackgroundTransparency = 0.25
                 LabelBG.Position = UDim2.new(0.5, 0,0, 0)
                 LabelBG.Size = UDim2.new(1, -10,0, 0)
@@ -1691,7 +2109,7 @@ function Library:CreateWindow(Setting)
                     
                     SliderFrame.Name = TitleText
                     SliderFrame.Parent = InternalSection
-                    SliderFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                    SliderFrame.BackgroundColor3 = Color3.fromRGB(12, 18, 30)
                     SliderFrame.BackgroundTransparency = 1.000
                     SliderFrame.Size = UDim2.new(1, 0, 0, 50)
                     
@@ -1704,7 +2122,7 @@ function Library:CreateWindow(Setting)
                     SliderBG.AnchorPoint = Vector2.new(0.5, 0.5)
                     SliderBG.Position = UDim2.new(0.5, 0, 0.5, 0)
                     SliderBG.Size = UDim2.new(1, -5, 1, 0)
-                    SliderBG.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+                    SliderBG.BackgroundColor3 = Color3.fromRGB(24, 32, 46)
                     SliderBG.BackgroundTransparency = 0.25
                     
                     SliderBGCorner.CornerRadius = UDim.new(0, 4)
@@ -1810,7 +2228,7 @@ function Library:CreateWindow(Setting)
                     
                     local function onInputBegan(input)
                         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                            holdStarted = tick()
+                            holdStarted = Now()
                             
                             input.Changed:Connect(function()
                                 if input.UserInputState == Enum.UserInputState.End then
@@ -1839,7 +2257,7 @@ function Library:CreateWindow(Setting)
                     SliderButton.InputChanged:Connect(onInputChanged)
                     
                     RunService.RenderStepped:Connect(function()
-                        if holdStarted > 0 and (tick() - holdStarted >= holdTime) and not dragging then
+                        if holdStarted > 0 and (Now() - holdStarted >= holdTime) and not dragging then
                             dragging = true
                         end
                         
@@ -2429,7 +2847,7 @@ function sectionFunction:AddKeyBind(Setting, Callback)
     
     BindFrame.Name = TitleText .. "bguvl"
     BindFrame.Parent = Section
-    BindFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    BindFrame.BackgroundColor3 = Color3.fromRGB(12, 18, 30)
     BindFrame.BackgroundTransparency = 1.000
     BindFrame.Position = UDim2.new(0, 0, 0.208333328, 0)
     BindFrame.Size = UDim2.new(1, 0, 0, 35)
@@ -2490,7 +2908,7 @@ function sectionFunction:AddKeyBind(Setting, Callback)
         Picking = true
         Bindkey.Text = "..."
         
-        task.wait(0.2)
+        TaskWait(0.2)
         
         local Connection
         Connection = uis.InputBegan:Connect(function(input)
@@ -2622,7 +3040,7 @@ end
 				local UICorner = Instance.new("UICorner")
 				BoxFrame.Name = "BoxFrame"
 				BoxFrame.Parent = Section
-				BoxFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+				BoxFrame.BackgroundColor3 = Color3.fromRGB(12, 18, 30)
 				BoxFrame.BackgroundTransparency = 1.000
 				BoxFrame.Position = UDim2.new(0, 0, 0.208333328, 0)
 				BoxFrame.Size = UDim2.new(1, 0, 0, 60)
@@ -2750,7 +3168,7 @@ end
 				local Sliderbox_2 = Instance.new("TextBox")
 				SliderFrame.Name = TitleText .. 'buda'
 				SliderFrame.Parent = Section
-				SliderFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+				SliderFrame.BackgroundColor3 = Color3.fromRGB(12, 18, 30)
 				SliderFrame.BackgroundTransparency = 1.000
 				SliderFrame.Position = UDim2.new(0, 0, 0.208333328, 0)
 				SliderFrame.Size = UDim2.new(1, 0, 0, 50)
@@ -2854,7 +3272,7 @@ end
 						-- Function to detect the start of dragging (for both mouse and touch)
 				local function onInputBegan(input)
 					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-						holdStarted = tick() -- Record the time when holding starts
+						holdStarted = Now() -- Record the time when holding starts
 						
 								-- Listen for release to stop dragging
 						input.Changed:Connect(function()
@@ -2888,7 +3306,7 @@ end
 						
 						-- RenderStepped updates the position while dragging
 				RunService.RenderStepped:Connect(function()
-					if holdStarted > 0 and (tick() - holdStarted >= holdTime) and not dragging then
+					if holdStarted > 0 and (Now() - holdStarted >= holdTime) and not dragging then
 						dragging = true
 					end
 					if dragging and dragInput then
