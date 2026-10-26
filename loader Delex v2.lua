@@ -1,55 +1,196 @@
 -- ============================================================
 -- Delex UI - loader (executor-agnostic)
--- รองรับ executor หลากหลาย: มี fallback สำหรับทุกฟังก์ชันที่ใช้
--- RightCtrl = เปิด/ปิด UI
+-- Supports multiple executors with capability fallbacks.
+-- รองรับ executor หลายตัว โดยตรวจความสามารถและมี fallback ให้ API ที่อาจไม่มี
+-- RightControl toggles the UI by default. / ค่าเริ่มต้น RightControl ใช้พับ/กาง UI
 --
--- โครงไฟล์ config ที่ระบบสร้างให้:
---   Delex/GameNames.json                         <- ชื่อโฟลเดอร์ของแต่ละเกม (แคช)
---   Delex/SaveMode.json                          <- จำโหมดแชร์/แยก
---   Delex/<ชื่อเกม>_<PlaceId>/<ชื่อผู้เล่น>.json   <- ค่าที่ตั้งไว้
+-- ============================================================
+-- AI / maintainer guide: read this before editing the loader or library.
+-- ============================================================
+-- Architecture:
+--   1) lib.lua is the UI library. This loader downloads it from LibUrl, compiles it,
+--      and receives a Library table with CreateWindow, Notify, theme, and UI APIs.
+--   2) loader.lua creates the actual Delex window and tabs, wires feature callbacks,
+--      and manages per-player JSON settings.
+--   3) Add game-specific features in this loader. Edit lib.lua only for shared UI
+--      behavior, control rendering, or window behavior.
+--   4) After editing either file, upload that file to the matching GitHub path.
 --
--- โหมด Save:
---   Separate Per Client = แต่ละ client แยกค่ากัน
---   Link All Clients    = ทุก client ในโฟลเดอร์เกมใช้ค่าเดียวกัน
+-- Loading from GitHub:
+--   loadstring(game:HttpGet("https://raw.githubusercontent.com/latavee1399-dev/AKO/refs/heads/main/loader%20Delex%20v2.lua"))()
+--   LibUrl below must point to raw.githubusercontent.com. A github.com/.../blob/... URL
+--   returns HTML instead of Lua source and will fail compilation.
 --
--- วิธีตั้งชื่อโฟลเดอร์เกม
---   A) แก้ CONFIG.GameNames ด้านล่าง (ถาวร ใช้ได้ทุกเครื่อง)
---   B) ตั้งก่อนโหลด loader (ไม่ต้องแก้ไฟล์บน GitHub):
---        getgenv().DelexLoaderConfig = { GameName = "Durian Garden" }
---        loadstring(game:HttpGet(url))()
---   C) แก้ในเกม: Settings > Save Setting Config > Game Folder Name
---   D) ปล่อยว่าง ระบบถาม Roblox API ให้เอง (เกมทั่วไปได้ชื่อจริง)
+-- Game-folder naming:
+--   * Set getgenv().DelexLoaderConfig BEFORE running the loader to override this run:
+--       getgenv().DelexLoaderConfig = { GameName = "Durian Garden" }
+--       loadstring(game:HttpGet(url))()
+--     Supported fields: GameName (current PlaceId only), GameNames (PlaceId-to-name map),
+--     SkipNameApi, AppendPlaceId, and RootFolder. Prefer DelexLoaderConfig to avoid
+--     collisions with another script's global Config table.
+--   * Name resolution order: CONFIG.GameNames -> Delex/GameNames.json cache -> Roblox
+--     API -> MarketplaceService -> game.Name -> Game_<PlaceId> fallback.
+--   * Names discovered automatically are cached. Some experiences do not expose public
+--     metadata (for example this Durian Garden place); set an override for those games.
+--   * Names are sanitized for executor file-system compatibility. PlaceId is appended
+--     by default to prevent different experiences with the same name sharing a folder.
 --
--- ข้อความที่แสดงในเกมต้องเป็นอังกฤษ เพราะฟอนต์ Roblox ไม่มีไทย
+-- Files created by the loader:
+--   <RootFolder>/GameNames.json                         cached PlaceId-to-name mappings
+--   <RootFolder>/SaveMode.json                          save mode shared across games
+--   <RootFolder>/<GameName>_<PlaceId>/<PlayerName>.json saved values for one username
+--   PlayerName is Players.LocalPlayer.Name, not DisplayName. Executor name is metadata.
+--
+-- UI object model:
+--   Library:CreateWindow({...}) -> Window
+--   Window:AddTab("Name") -> Tab
+--   Tab:AddLeftGroupbox("Name") / AddRightGroupbox("Name") -> Section
+--   Sections support AddToggle, AddButton, AddLabel, AddDropdown, AddKeyBind,
+--   AddInput, and AddSlider. The current tabs are Misc and Settings.
+--   Add new tabs in the "Add your tabs here" block near the bottom. The call
+--   Window.layoutOrder("Misc", "Settings") keeps Misc and Settings at the bottom.
+--
+-- Automatic settings persistence:
+--   Use Delex.Bind.Toggle/Slider/Dropdown/Multi/Input/Keybind instead of calling
+--   Group:Add... directly. Signature: Delex.Bind.<Type>(Group, StableKey, Options).
+--   StableKey must be unique and should remain unchanged between script revisions.
+--   Bind wrappers load defaults from saved Values and queue a JSON save after changes
+--   (about 0.6 seconds). Options.Callback applies the value to the actual feature.
+--   Example:
+--     local Tab = Window:AddTab("Farm")
+--     local Group = Tab:AddLeftGroupbox("Farm")
+--     Delex.Bind.Toggle(Group, "AutoFarm", {
+--       Text = "Auto Farm", Default = false,
+--       Callback = function(enabled) -- start/stop the feature here end
+--     })
+--     Delex.Bind.Slider(Group, "FarmDelay", {
+--       Text = "Delay", Min = 0, Max = 5, Default = 1, Rouding = 1,
+--       Callback = function(value) -- apply the value here end
+--     })
+--   Direct Group:AddToggle/AddSlider/... calls are NOT auto-saved unless their callback
+--   calls Delex.Config.Set(key, value) or Delex.Config.Save(). Config API:
+--   Delex.Config.Get/Set/Save/QueueSave/Path/Mode and Delex.Config.Values.
+--   Bind.Keybind stores the chosen key name; its Options.Callback receives active state.
+--
+-- Save Setting Config behavior:
+--   Separate Per Client: each Roblox username has a separate JSON file.
+--   Link All Clients: saves the same payload to other client files returned by listfiles
+--   in the current game's folder. Without listfiles, only the current file can be written.
+--   Reload From File reapplies registered Toggle/Slider/Dropdown/Multi/Input controls.
+--   Keybind is loaded when the control is first created but is not reapplied by Reload.
+--   Persistent saving requires readfile and writefile; without them the UI can still open.
+--
+-- Library APIs used or exposed by this loader:
+--   Library:Notify(settings, true), :SetTheme(name), :GetThemeNames(), :GetTheme(),
+--   :RegisterTheme(name, colorTable), :ApplyTheme(colorTable), :OnThemeChanged(callback),
+--   :SetToggleKey(key), :GetToggleKey(), Library.ToggleUI(), Library.DestroyUI().
+--   Built-in themes: Blue, Red, Green, Purple, Orange, White.
+--
+-- AI editing rules:
+--   * Use English for text rendered inside Roblox UI; comments may use any language.
+--   * The current library expects the slider precision option named Rouding (misspelled).
+--   * Feature callbacks must handle character respawn and feature shutdown where needed.
+--   * Do not rename existing StableKeys without migrating their saved values.
+--   * Check executor capabilities before using HTTP/file APIs; availability varies.
+--   * Misc Player features are client-side and may be restricted by the experience/server.
 -- ============================================================
 
 -- ============================================================
--- 0) CONFIG — ค่าเริ่มต้น (แก้ในไฟล์นี้ หรือส่งเข้ามาตอน loadstring ก็ได้)
+-- คู่มือภาษาไทย / Thai guide
+-- ============================================================
+-- ภาพรวม:
+--   * lib.lua คือ UI library; loader ดาวน์โหลดและ compile แล้วเรียก CreateWindow()
+--   * loader.lua สร้างหน้าต่าง, tabs, controls, callbacks และระบบบันทึก config
+--   * เพิ่มฟีเจอร์เกมใน loader.lua; แก้ lib.lua เฉพาะเมื่อแก้พฤติกรรม UI พื้นฐาน
+--
+-- เรียกใช้:
+--   loadstring(game:HttpGet("https://raw.githubusercontent.com/latavee1399-dev/AKO/refs/heads/main/loader%20Delex%20v2.lua"))()
+--   URL ของ Library แยกอยู่ในตัวแปร LibUrl. ใช้ raw URL ไม่ใช่หน้า GitHub แบบ blob
+--
+-- ตั้งชื่อเกม:
+--   * อัตโนมัติ: CONFIG.GameNames -> Delex/GameNames.json -> Roblox API ->
+--     MarketplaceService -> game.Name -> Game_<PlaceId>
+--   * ตั้งก่อนโหลด: getgenv().DelexLoaderConfig = { GameName = "Durian Garden" }
+--   * ตั้งจาก UI: Settings > Save Setting Config > Game Folder Name; มีผลรอบถัดไป
+--   * CONFIG.GameNames ใช้ PlaceId เป็น key. AppendPlaceId เปิดไว้เพื่อกันชื่อซ้ำ
+--
+-- เพิ่ม controls พร้อม auto-save:
+--   local Tab = Window:AddTab("Farm")
+--   local Group = Tab:AddLeftGroupbox("Farm")
+--   Delex.Bind.Toggle(Group, "AutoFarm", {
+--     Text = "Auto Farm", Default = false,
+--     Callback = function(enabled) -- เริ่ม/หยุดฟีเจอร์จริงตรงนี้ end
+--   })
+--   ใช้ StableKey ที่ไม่ซ้ำและอย่าเปลี่ยนชื่อโดยไม่ย้ายค่าเก่า. Bind helpers จะโหลด
+--   default จาก JSON และเซฟหลังเปลี่ยนค่าประมาณ 0.6 วินาที. Group:AddToggle โดยตรง
+--   จะไม่ auto-save เว้นแต่ callback เรียก Delex.Config.Set/Save เอง
+--
+-- ระบบ Save:
+--   Separate Per Client แยกไฟล์ตาม username; Link All Clients เขียนค่าร่วมไปยังไฟล์
+--   client อื่นในโฟลเดอร์เกมที่ listfiles มองเห็น. ต้องมี readfile/writefile จึงจะเซฟได้.
+--   Reload From File apply กลับ Toggle/Slider/Dropdown/Multi/Input; Keybind ไม่ apply
+--   ใหม่หลังสร้างแล้ว. Config API อยู่ใน Delex.Config และ Bind API อยู่ใน Delex.Bind
+--
+-- โครงสร้าง UI:
+--   Window -> AddTab -> AddLeftGroupbox/AddRightGroupbox -> controls
+--   ปัจจุบันมี Misc และ Settings; เพิ่มแท็บใหม่ในบล็อกตัวอย่างท้าย loader.
+--   Misc/Settings ถูกตรึงไว้ท้ายรายการด้วย Window.layoutOrder().
+--
+-- หมายเหตุ:
+--   * ข้อความที่แสดงใน Roblox UI ควรเป็นอังกฤษเพื่อให้ฟอนต์แสดงได้แน่นอน
+--   * slider precision ใช้ option ชื่อ Rouding ตามชื่อที่ library ปัจจุบันรองรับ
+--   * ฟีเจอร์ Misc Player ทำงานฝั่ง client และอาจถูกเกม/เซิร์ฟเวอร์จำกัด
+--   * ตรวจ capability ของ executor ก่อนเรียก HTTP หรือ file APIs เสมอ
+-- ============================================================
+-- File layout created by the loader:
+--   Delex/GameNames.json                         cached game-folder names
+--   Delex/SaveMode.json                          shared save-mode selection
+--   Delex/<GameName>_<PlaceId>/<PlayerName>.json saved settings
+-- ============================================================
+
+--
+-- Save modes:
+--   Separate Per Client = each Roblox username has its own config file.
+--   Link All Clients    = saves the same data to visible client files in this game's folder.
+--
+-- Configure game-folder names:
+--   A) Edit CONFIG.GameNames below (persistent for every run using this loader).
+--   B) Set getgenv().DelexLoaderConfig before loading (no GitHub edit required).
+--   C) Enter the name in Settings > Save Setting Config > Game Folder Name.
+--   D) Leave it unset to let the loader query Roblox APIs when possible.
+--
+-- Text rendered inside Roblox UI should be English; the default Roblox font may not support Thai.
+-- ============================================================
+
+-- ============================================================
+-- 0) Default configuration (edit here or pass overrides before loadstring).
 -- ============================================================
 local CONFIG = {
-	-- ตั้งชื่อโฟลเดอร์ของแต่ละเกมเอง: [PlaceId] = "ชื่อโฟลเดอร์"
-	-- เกมที่ไม่อยู่ในตารางนี้ ระบบจะหาชื่อจริงให้เอง (API -> game.Name -> Game_<PlaceId>)
-	-- ดู PlaceId ได้จาก print(game.PlaceId) หรือบรรทัด PlaceId ในแท็บ Settings
+	-- Set a custom folder name per experience: [PlaceId] = "folder name".
+	-- Unlisted games use auto-detection, then fall back to Game_<PlaceId>.
+	-- Get the current PlaceId with print(game.PlaceId) or from the Settings tab.
 	GameNames = {
 		[54849] = "Durian Garden",
 	},
 
-	-- true = ไม่ต้องถาม API ของ Roblox (เร็วขึ้น แต่เกมที่ชื่อภายในจะได้ Game_<PlaceId>)
+	-- true skips Roblox API lookups. Internal game names then fall back to Game_<PlaceId>.
 	SkipNameApi = false,
 
-	-- ปิดท้ายชื่อโฟลเดอร์ด้วย PlaceId อัตโนมัติ (กันเกมชื่อซ้ำกันเขียนทับกัน)
+	-- Append PlaceId to prevent experiences with duplicate names from sharing folders.
 	AppendPlaceId = true,
 
-	-- โฟลเดอร์รากของ config
+	-- Root folder for all Delex data.
 	RootFolder = "Delex",
 }
 
 -- ============================================================
--- 0.1) ตั้งชื่อเกมจากภายนอก (ก่อน loadstring)
+-- 0.1) External game-name/config overrides (set these before running loadstring).
 --   getgenv().DelexLoaderConfig = { GameName = "Durian Garden" }
 --   loadstring(game:HttpGet(url))()
--- หรือใช้ getgenv().Config = { GameName = "..." } ก็ได้
--- มีผลกับโฟลเดอร์ของ "เกมที่กำลังเล่นอยู่" เท่านั้น
+-- You may also pass GameNames = { [PlaceId] = "name", ... }, SkipNameApi,
+-- AppendPlaceId, and RootFolder. Prefer DelexLoaderConfig to avoid collisions
+-- with another script's global Config table.
+-- Overrides apply only to the currently running loader/game.
 -- ============================================================
 local function CollectOverride()
 	local Sources = {}
@@ -96,7 +237,7 @@ do
 end
 
 -- ============================================================
--- 1) compat shims (ทำงานก่อนทุกอย่าง)
+-- 1) Compatibility shims (run before using optional executor APIs).
 -- ============================================================
 if type(getgenv) ~= "function" then
 	function getgenv()
@@ -132,7 +273,7 @@ local TableFind = table.find or function(List, Value)
 	return nil
 end
 
--- ชื่อ executor: แต่ละตัวมีฟังก์ชันไม่เหมือนกัน และบางตัวไม่มีเลย
+-- Executor identification: names and helper functions vary by executor.
 local function RawExecutorName()
 	if type(identifyexecutor) == "function" then
 		local Ok, Name = pcall(identifyexecutor)
@@ -156,7 +297,7 @@ local function RawExecutorName()
 		end
 	end
 
-	-- จับจาก global ที่แต่ละ executor ทิ้งไว้
+	-- Identify executor-specific globals left behind by the runtime.
 	local Marks = {
 		{ "syn", "Synapse" },
 		{ "KRNL_LOADED", "Krnl" },
@@ -174,7 +315,7 @@ local function RawExecutorName()
 	return nil
 end
 
--- HTTP: game.HttpGet เป็นหลัก ถ้าไม่มีค่อยลองอย่างอื่น
+-- HTTP helper: prefer game.HttpGet, then try executor-specific request functions.
 local function HttpGet(Url)
 	if type(game.HttpGet) == "function" then
 		local Ok, Body = pcall(game.HttpGet, game, Url)
@@ -215,7 +356,7 @@ if not Chunk then
 	error("[Delex] compile failed: " .. tostring(CompileError), 0)
 end
 
--- กันกรณีวันหลังอัปไฟล์แบบ all-in-one (ที่มี runner ในตัว) จะได้ไม่เปิด 2 หน้าต่าง
+-- Remove the old all-in-one UI before running, to prevent duplicate windows.
 Genv.GravityHubManual = true
 
 local Library = Chunk()
@@ -226,7 +367,7 @@ end
 local HttpService = game:GetService("HttpService")
 
 -- ============================================================
--- 2) file API (ตรวจแล้วใช้ fallback ถ้าขาด)
+-- 2) File APIs, with fallbacks for missing optional functions.
 -- ============================================================
 local CanWrite = type(writefile) == "function"
 local CanRead = type(readfile) == "function"
@@ -256,7 +397,7 @@ end
 
 local Executor = Sanitize(RawExecutorName() or "UnknownClient")
 
--- ชื่อผู้เล่น Roblox ใช้เป็นชื่อไฟล์ config
+-- Use the Roblox username as the config filename.
 local function PlayerName()
 	local Ok, Player = pcall(function()
 		return game:GetService("Players").LocalPlayer
@@ -267,9 +408,9 @@ local function PlayerName()
 	return "Player"
 end
 
--- ชื่อโฟลเดอร์เฉพาะเกมอยู่ใน CONFIG ด้านบนสุดของไฟล์ (CONFIG.GameNames)
+-- The per-game folder name is configured in CONFIG.GameNames near the top of this file.
 
--- แคชชื่อเกม: จำไว้ที่ Delex/GameNames.json ตั้งชื่อเกมหนึ่งครั้งใช้ได้ตลอด
+-- Cache detected game names in Delex/GameNames.json so each game only needs to be resolved once.
 local NAMES_FILE = CONFIG.RootFolder .. "/GameNames.json"
 local NameCache = {}
 
@@ -289,7 +430,7 @@ local function LoadNameCache()
 	end
 end
 
--- เขียนชื่อเกมลงแคช (Delex/GameNames.json)
+-- Store a game name in the Delex/GameNames.json cache.
 local function StoreGameName(PlaceId, Name)
 	if not HasFiles then
 		return false
@@ -302,7 +443,7 @@ local function StoreGameName(PlaceId, Name)
 	if not Ok or type(Encoded) ~= "string" then
 		return false
 	end
-	-- ต้องมีโฟลเดอร์ Delex ก่อน ไม่งั้น writefile ล้มเหลว
+	-- Create the Delex folder before writing the cache file.
 	if type(makefolder) == "function" and type(isfolder) == "function" then
 		if not isfolder(CONFIG.RootFolder) then
 			pcall(makefolder, CONFIG.RootFolder)
@@ -311,8 +452,8 @@ local function StoreGameName(PlaceId, Name)
 	return (pcall(writefile, NAMES_FILE, Encoded))
 end
 
--- ชื่อแบบภายในของ Roblox เช่น "Ugc", "Ugc_91350038154849", "Place_123", "12345"
--- เก็บที่มาของชื่อ เพื่อโชว์ใน UI ว่ามาจากไหน
+-- Roblox internal names such as "Ugc", "Ugc_91350038154849", "Place_123", or numeric IDs.
+-- Track where the selected game-folder name came from for the Settings UI.
 local GameNameSource = "unknown"
 
 local function LooksInternalName(Name)
@@ -349,7 +490,7 @@ local function JsonGet(Url)
 	return nil
 end
 
--- ชื่อเกมจาก API ตัวเดียวกับที่หน้าเว็บ Roblox ใช้ (แม่นกว่า game.Name)
+-- Query the Roblox API used by the public experience listing.
 local function FetchGameNameFromApi()
 	local PlaceId = tostring(game.PlaceId)
 
@@ -368,7 +509,7 @@ local function FetchGameNameFromApi()
 			end
 		end
 	else
-		-- ไม่ได้ universeId: ลองใช้ placeDetails ซึ่งคืนชื่อ place ตรง ๆ
+		-- No universeId was returned; try the endpoint that returns place details directly.
 		local PlaceData = JsonGet("https://games.roblox.com/v1/games/multiget-place-details?placeIds=" .. PlaceId)
 		if type(PlaceData) == "table" and type(PlaceData[1]) == "table" then
 			local Name = PlaceData[1].name
@@ -381,7 +522,7 @@ local function FetchGameNameFromApi()
 	return nil
 end
 
--- MarketplaceService เป็นทางสำรอง (บาง place คืนชื่อภายในจึงต้องกรองออก)
+-- MarketplaceService is a fallback; some places return internal names, which are filtered out.
 local function FetchGameNameFromMarketplace()
 	local Ok, Info = pcall(function()
 		return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
@@ -393,7 +534,7 @@ local function FetchGameNameFromMarketplace()
 end
 
 local function ResolveGameName()
-	-- 1) ชื่อจาก CONFIG.GameNames (ตารางด้านบนของไฟล์) — ชนะทุกอย่าง
+	-- 1) Explicit per-place name from CONFIG.GameNames takes precedence.
 	local Override = CONFIG.GameNames[game.PlaceId]
 		or CONFIG.GameNames[tostring(game.PlaceId)]
 	if type(Override) == "string" and Override ~= "" then
@@ -401,14 +542,14 @@ local function ResolveGameName()
 		return Sanitize(Override)
 	end
 
-	-- 2) ชื่อที่เคยตั้งไว้ในเกมนี้ (Delex/GameNames.json)
+	-- 2) Name previously saved for this PlaceId in Delex/GameNames.json.
 	local Cached = NameCache[tostring(game.PlaceId)]
 	if type(Cached) == "string" and Cached ~= "" then
 		GameNameSource = "saved"
 		return Sanitize(Cached)
 	end
 
-	-- 3) ชื่อจาก Roblox API
+	-- 3) Resolve the name through Roblox APIs.
 	if not CONFIG.SkipNameApi then
 		local FromApi = FetchGameNameFromApi()
 		if type(FromApi) == "string" and not LooksInternalName(FromApi) then
@@ -430,7 +571,7 @@ local function ResolveGameName()
 		return Sanitize(FromGame)
 	end
 
-	-- 5) ไม่รู้อะไรเลย
+	-- 5) Fall back to a generic PlaceId-based folder name.
 	GameNameSource = "fallback"
 	return "Game_" .. tostring(game.PlaceId)
 end
@@ -438,7 +579,7 @@ end
 LoadNameCache()
 local GameName = ResolveGameName()
 
--- จำชื่อที่เจออัตโนมัติไว้ใน GameNames.json เพื่อไม่ต้องถามซ้ำในครั้งหน้า
+-- Cache automatically detected names in GameNames.json to avoid resolving them again next time.
 do
 	local Cached = NameCache[tostring(game.PlaceId)]
 	local HasOverride = CONFIG.GameNames[game.PlaceId] ~= nil
@@ -452,7 +593,7 @@ do
 end
 local ClientName = PlayerName()
 
--- ต่อ PlaceId ท้ายชื่อเสมอ กันเกมชื่อซ้ำกันเขียนทับกัน
+-- Append PlaceId to avoid folder collisions between experiences with the same name.
 local function WithPlaceId(Name)
 	if not CONFIG.AppendPlaceId then
 		return Name
@@ -511,7 +652,7 @@ local function NormalizePath(Path)
 	if string.find(Clean, "/", 1, true) then
 		return Clean
 	end
-	-- บาง executor คืนมาแค่ชื่อไฟล์ ไม่ใช่ path เต็ม
+	-- Some executors return only a filename instead of a full path.
 	return GameFolder .. "/" .. Clean
 end
 
@@ -553,7 +694,7 @@ local function WriteJson(Path, Data)
 	EnsureFolder(GameFolder)
 	local Ok = pcall(writefile, Path, Encoded)
 	if not Ok then
-		-- ลองสร้างโฟลเดอร์แม่แล้วเขียนอีกรอบ
+		-- Create the parent folder and retry the write.
 		local Parent = string.match(Path, "^(.*)/[^/]+$")
 		EnsureFolder(Parent)
 		Ok = pcall(writefile, Path, Encoded)
@@ -694,7 +835,7 @@ function Config.Set(Key, Value)
 end
 
 -- ============================================================
--- 4) bind helpers (สร้างคอนโทรล + เซฟอัตโนมัติ)
+-- 4) Bind helpers: create controls and enable automatic saving.
 -- ============================================================
 local Bind = {}
 
@@ -864,7 +1005,7 @@ local Window = Library:CreateWindow({
 	Subtitle = os.date("%d/%m/%Y")
 })
 
--- ===== แท็บเริ่มต้น (อยู่บนสุดของกลุ่มล่างเสมอ) =====
+-- ===== Default tab (pinned just above Settings) =====
 local MiscTab = Window:AddTab("Misc")
 MiscTab:AddLeftGroupbox("Welcome"):AddLabel(
 	"Delex UI",
@@ -873,8 +1014,8 @@ MiscTab:AddLeftGroupbox("Welcome"):AddLabel(
 )
 
 -- ============================================================
--- Misc Player: ฟีเจอร์ช่วยเหลือผู้เล่น (client-side)
--- ทุกอย่างผูกกับ Character ปัจจุบัน และกู้ค่าเดิมเมื่อปิด/respawn
+-- Misc Player: client-side player utilities.
+-- Features track the current Character and reapply after respawn.
 -- ============================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -950,7 +1091,7 @@ local function ApplyMovement()
 	end)
 end
 
--- เรียกซ้ำทุกครั้งที่ respawn เพื่อไม่ให้ค่าหาย
+-- Reapply enabled features after each character respawn.
 local ApplyNoClip, ApplyFly, StopFly
 
 local function OnCharacterAdded(Character)
@@ -1189,7 +1330,7 @@ Delex.Bind.Toggle(PlayerGroup, "Fly", {
 	end
 })
 
--- ===== แท็บล่างสุด: Settings =====
+-- ===== Final tab: Settings =====
 local SettingsTab = Window:AddTab("Settings")
 local SaveGroup = SettingsTab:AddLeftGroupbox("Save Setting Config")
 
@@ -1236,7 +1377,7 @@ local SaveModeControl = SaveGroup:AddDropdown("SaveMode", {
 		SaveMode = Value
 		EnsureFolder(ROOT)
 		WriteJson(MODE_FILE, { Mode = SaveMode })
-		-- เข้าลิงก์: ดันค่าปัจจุบันของเราลงทุกไฟล์ที่มีในโฟลเดอร์เกม
+		-- In linked mode, copy the current values to every existing client file in this game's folder.
 		Applying = true
 		SaveNow()
 		Applying = false
@@ -1291,7 +1432,7 @@ SaveGroup:AddButton({
 	end
 })
 
--- ตั้งชื่อโฟลเดอร์เกมนี้เองได้ (บันทึกลง Delex/GameNames.json มีผลรอบถัดไป)
+-- Set a custom folder name for this game (saved in Delex/GameNames.json; applies after restart).
 SaveGroup:AddInput("GameFolderName", {
 	Text = "Game Folder Name",
 	Placeholder = "e.g. Durian Garden (restart to apply)",
@@ -1312,7 +1453,7 @@ SaveGroup:AddInput("GameFolderName", {
 	end
 })
 
--- บอก PlaceId ให้เห็นชัด ๆ เพื่อเอาไปใส่ใน CONFIG.GameNames ของ loader
+-- Show the PlaceId so it can be added to CONFIG.GameNames in this loader.
 SaveGroup:AddLabel("PlaceId of this game: " .. tostring(game.PlaceId))
 
 local InfoGroup = SettingsTab:AddRightGroupbox("Info")
@@ -1321,7 +1462,7 @@ InfoGroup:AddLabel(
 	"File API: " .. CompatLine()
 )
 
--- ===== ช่องทางติดต่อ: Discord =====
+-- ===== Contact information: Discord =====
 local DiscordInvite = "https://discord.gg/wpewEjDhCs"
 
 local function CopyToClipboard(Text)
@@ -1357,11 +1498,11 @@ InfoGroup:AddButton({
 	end
 })
 
--- ===== Settings UI: เปลี่ยนสี + ปุ่มคีย์ลัด =====
+-- ===== Settings UI: theme and toggle-key controls =====
 local UiGroup = SettingsTab:AddLeftGroupbox("Settings UI")
 
--- พาเลตต์สำรองฝังใน loader: ถ้า lib บน GitHub ยังเป็นเวอร์ชันเก่า (ไม่มี SetTheme)
--- สีจะยังเปลี่ยนได้ โดยไม่ต้องรออัปไฟล์ไลบรารี
+-- Fallback palette is built into the loader for older GitHub library versions.
+-- Theme selection still works without uploading the latest library file.
 local FallbackThemes = {
 	Blue = { 0, 140, 255, 0, 100, 210, 0, 75, 160 },
 	Red = { 255, 0, 0, 200, 0, 0, 170, 0, 0 },
@@ -1393,7 +1534,7 @@ local function ThemeTable(Name)
 	return Colors
 end
 
--- เปลี่ยนสีด้วยการเดินสำรวจ GUI จริง (ไม่ต้องพึ่ง API ใน lib)
+-- Change colors by walking the live GUI tree (does not require library theme APIs).
 local function ForceTheme(Colors)
 	if type(Colors) ~= "table" then
 		return false
@@ -1459,7 +1600,7 @@ local function ForceTheme(Colors)
 		end
 	end
 
-	-- ปุ่มลอยอยู่นอก GUI หลัก
+	-- The floating toggle button is outside the main window GUI.
 	local ToggleButton = getgenv().DelexToggleButton
 	if ToggleButton then
 		for _, Child in ipairs(ToggleButton:GetChildren()) do
@@ -1479,7 +1620,7 @@ local function ApplyThemeByName(Name)
 		return false
 	end
 
-	-- ใช้ API ของ lib ถ้ามี (อัปเดตครบกว่า) ถ้าไม่มีก็ใช้วิธีสำรวจ GUI
+	-- Prefer the library theme API when available; otherwise walk the live GUI tree.
 	if type(Library.SetTheme) == "function" then
 		local Ok = pcall(function()
 			Library:SetTheme(Name)
@@ -1493,7 +1634,7 @@ local function ApplyThemeByName(Name)
 	if not Ok then
 		return false
 	end
-	-- ตั้งแต่รอบสองเป็นต้นไป สีใน UIColor ถูกเปลี่ยนแล้ว จึงเรียกซ้ำได้ผล
+	-- The updated UIColor values allow this fallback to reapply the theme on later calls.
 	return true
 end
 
@@ -1547,7 +1688,7 @@ KeyControl = UiGroup:AddKeyBind({
 		if type(Library.SetToggleKey) == "function" then
 			Library:SetToggleKey(Key)
 		else
-			-- สำรอง: ตั้งค่าที่ตัวแปรเดียวกับที่ handler ใน lib อ่าน
+			-- Fallback: write the variable read by the key handler in the library.
 			getgenv().DelexToggleKey = Key
 		end
 		Config.Set("UiToggleKey", Key)
@@ -1556,7 +1697,7 @@ KeyControl = UiGroup:AddKeyBind({
 
 UiGroup:AddLabel("The key above folds / unfolds this UI.")
 
--- ค่าที่เซฟไว้มีผลตั้งแต่เปิดสคริปต์
+-- Apply saved settings during startup.
 local SavedTheme = Config.Get("UiTheme", nil)
 if SavedTheme then
 	ApplyThemeByName(SavedTheme)
@@ -1575,14 +1716,14 @@ if SavedKey then
 	end)
 end
 
--- ===== เพิ่มแท็บของคุณตรงนี้ (จะไปอยู่เหนือ Misc) =====
--- ตัวอย่าง:
+-- ===== Add your tabs here (they will appear above Misc) =====
+-- Example:
 -- local Tab = Window:AddTab("Farm")
 -- local Group = Tab:AddLeftGroupbox("Farm")
 -- Delex.Bind.Toggle(Group, "AutoFarm", { Text = "Enable Farm", Default = false })
 -- Delex.Bind.Slider(Group, "FarmDelay", { Text = "Delay", Min = 0, Max = 5, Rouding = 1, Default = 0.5 })
 
--- สั่งให้ Misc อยู่บนสุดของกลุ่มล่าง และ Settings ล่างสุดตลอด
+-- Pin Misc above Settings at the bottom of the tab list.
 local Ordered = pcall(function()
 	Window.layoutOrder("Misc", "Settings")
 end)
@@ -1590,7 +1731,7 @@ if not Ordered then
 	Log("layoutOrder is missing - upload the latest lib.lua to GitHub")
 end
 
--- เขียนไฟล์ตั้งต้นรอบแรก เพื่อให้เห็นโครงโฟลเดอร์ทันที
+-- Write an initial config file so the folder structure exists immediately.
 SaveNow()
 PathLabel:SetText(PathText())
 
