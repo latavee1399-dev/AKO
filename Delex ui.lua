@@ -543,6 +543,7 @@ NotiList.VerticalAlignment = Enum.VerticalAlignment.Bottom
 NotiList.Padding = UDim.new(0, 5)
 
 
+getgenv().DelexGuiFolder = GuiParent
 Library_Function.Gui.Parent = GuiParent
 Library_Function.NotiGui.Parent = GuiParent
 
@@ -733,9 +734,14 @@ function Library:CreateWindow(Setting)
     Library_Function.LoadLogo()
 
 -- ============================================================
--- floating toggle: ปุ่มลอยสำหรับพับ/กาง UI
--- ตำแหน่งเป็น Control ฝั่งซ้ายของจอ และกดลากย้ายได้
+-- floating toggle: ปุ่มลอยสำหรับพับ/กาง UI (รองรับมือถือ)
+-- แตะ = พับ/กาง, ลาก = ย้ายตำแหน่ง, ขนาดใหญ่พอสำหรับนิ้ว
 -- ============================================================
+local function IsMobile()
+	local UIService = game:GetService("UserInputService")
+	return UIService.TouchEnabled and not UIService.KeyboardEnabled
+end
+
 local function MakeToggleButton()
 	if getgenv().DelexToggleButton and getgenv().DelexToggleButton.Parent then
 		return
@@ -745,21 +751,25 @@ local function MakeToggleButton()
 	ToggleGui.Name = "Delex Toggle"
 	ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	ToggleGui.ResetOnSpawn = false
+	ToggleGui.DisplayOrder = 999
+
+	local ButtonSize = IsMobile() and 60 or 46
 
 	local SavedPos = getgenv().DelexTogglePos
 	local ToggleButton = Instance.new("TextButton")
 	ToggleButton.Name = "ToggleButton"
 	ToggleButton.Parent = ToggleGui
 	ToggleButton.AnchorPoint = SavedPos and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5)
-	ToggleButton.Position = SavedPos or UDim2.new(0, 10, 0.5, 0)
-	ToggleButton.Size = UDim2.new(0, 46, 0, 46)
+	ToggleButton.Position = SavedPos or UDim2.new(0, 14, 0.62, 0)
+	ToggleButton.Size = UDim2.new(0, ButtonSize, 0, ButtonSize)
 	ToggleButton.BackgroundColor3 = Color3.fromRGB(10, 16, 26)
 	ToggleButton.BackgroundTransparency = 0.35
 	ToggleButton.AutoButtonColor = false
+	ToggleButton.Active = true
 	ToggleButton.Text = ""
 
 	local ToggleCorner = Instance.new("UICorner", ToggleButton)
-	ToggleCorner.CornerRadius = UDim.new(0, 12)
+	ToggleCorner.CornerRadius = UDim.new(0, 14)
 
 	local ToggleStroke = Instance.new("UIStroke", ToggleButton)
 	ToggleStroke.Name = "DelexStroke"
@@ -786,6 +796,7 @@ local function MakeToggleButton()
 	local DragStart = nil
 	local DragOrigin = nil
 	local Moved = false
+	local TouchThreshold = IsMobile() and 12 or 4
 
 	ToggleButton.InputBegan:Connect(function(Input)
 		if Input.UserInputType ~= Enum.UserInputType.MouseButton1
@@ -806,7 +817,7 @@ local function MakeToggleButton()
 			return
 		end
 		local Delta = Input.Position - DragStart
-		if math.abs(Delta.X) + math.abs(Delta.Y) > 4 then
+		if math.abs(Delta.X) + math.abs(Delta.Y) > TouchThreshold then
 			Moved = true
 		end
 		if Moved then
@@ -818,12 +829,32 @@ local function MakeToggleButton()
 		end
 	end)
 
+	local function ClampToScreen()
+		-- กันปุ่มหลุดขอบจอหลังหมุนจอ/เปลี่ยนความละเอียด
+		local Camera = workspace.CurrentCamera
+		if not Camera then
+			return
+		end
+		local Viewport = Camera.ViewportSize
+		if not Viewport or Viewport.X <= 0 or Viewport.Y <= 0 then
+			return
+		end
+		local Absolute = ToggleButton.AbsolutePosition
+		local Size = ToggleButton.AbsoluteSize
+		local Half = Size.X / 2
+		local X = math.clamp(Absolute.X + Half, Half + 4, Viewport.X - Half - 4)
+		local Y = math.clamp(Absolute.Y + Size.Y / 2, Size.Y / 2 + 4, Viewport.Y - Size.Y / 2 - 4)
+		ToggleButton.AnchorPoint = Vector2.new(0.5, 0.5)
+		ToggleButton.Position = UDim2.fromOffset(X, Y)
+	end
+
 	local function EndDrag()
 		if not DragStart then
 			return
 		end
 		DragStart = nil
 		if Moved then
+			ClampToScreen()
 			getgenv().DelexTogglePos = ToggleButton.Position
 		else
 			Library.ToggleUI()
@@ -838,6 +869,14 @@ local function MakeToggleButton()
 		end
 	end)
 
+	-- หมุนจอ/ย่อหน้าต่าง: ดึงปุ่มกลับเข้ากรอบ
+	local Camera = workspace.CurrentCamera
+	if Camera then
+		Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+			ClampToScreen()
+		end)
+	end
+
 	ToggleGui.Parent = GuiParent
 	getgenv().DelexToggleButton = ToggleButton
 	Library_Function.ToggleButton = ToggleButton
@@ -847,6 +886,7 @@ local function MakeToggleButton()
 	getgenv().Delex = getgenv().Delex or {}
 	getgenv().Delex.ToggleButton = ToggleButton
 	getgenv().Delex.ToggleStroke = ToggleStroke
+	getgenv().Delex.GuiParent = GuiParent
 end
 
 	-- สร้างปุ่มพับ UI ทันที (ถ้ามีอยู่แล้วจะไม่สร้างซ้ำ)
@@ -988,7 +1028,7 @@ end
 	TitleHolder.Name = "TitleHolder"
 	TitleHolder.BackgroundTransparency = 1.000
 	TitleHolder.Position = UDim2.new(0, 58, 0, 3)
-	TitleHolder.Size = UDim2.new(1, -112, 0, 42)
+	TitleHolder.Size = UDim2.new(1, -158, 0, 42)
 
 	local TitleList = Instance.new("UIListLayout", TitleHolder)
 	TitleList.FillDirection = Enum.FillDirection.Vertical
@@ -1023,6 +1063,33 @@ end
 	SubtitleLabel.TextColor3 = getgenv().UIColor["Text Color"]
 	SubtitleLabel.Text = (getgenv().MainDesc ~= "" and tostring(getgenv().MainDesc)) or "No Description"
 
+	-- ปุ่มปิด UI บนหัวหน้าต่าง: แตะง่ายบนมือถือ (นิ้วโป้งขวา)
+	local CloseButton = Instance.new("TextButton", TopMain)
+	CloseButton.Name = "CloseButton"
+	CloseButton.AnchorPoint = Vector2.new(1, 0.5)
+	CloseButton.AutoButtonColor = false
+	CloseButton.BackgroundColor3 = Color3.fromRGB(160, 40, 55)
+	CloseButton.BackgroundTransparency = 0.15
+	CloseButton.Position = UDim2.new(1, -8, 0, 24)
+	CloseButton.Size = UDim2.new(0, 40, 0, 40)
+	CloseButton.Text = "X"
+	CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	CloseButton.TextSize = 20
+	CloseButton.Font = Enum.Font.GothamBold
+
+	local CloseCorner = Instance.new("UICorner", CloseButton)
+	CloseCorner.CornerRadius = UDim.new(0, 10)
+
+	local CloseStroke = Instance.new("UIStroke", CloseButton)
+	CloseStroke.Name = "DelexStroke"
+	CloseStroke.Color = getgenv().UIColor["Border Color"]
+	CloseStroke.Thickness = 1.5
+	CloseStroke.Transparency = 0.25
+
+	CloseButton.MouseButton1Click:Connect(function()
+		Library.ToggleUI()
+	end)
+
 	-- player avatar in a circle, top right of the header
 	local AvatarHolder = Instance.new("Frame", TopMain)
 	AvatarHolder.Name = "AvatarHolder"
@@ -1031,7 +1098,7 @@ end
 	AvatarHolder.BackgroundTransparency = 0.2
 	AvatarHolder.BorderSizePixel = 0
 	AvatarHolder.ClipsDescendants = true
-	AvatarHolder.Position = UDim2.new(1, -10, 0, 24)
+	AvatarHolder.Position = UDim2.new(1, -56, 0, 24)
 	AvatarHolder.Size = UDim2.new(0, 36, 0, 36)
 
 	local AvatarCorner = Instance.new("UICorner", AvatarHolder)
