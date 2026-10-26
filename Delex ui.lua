@@ -752,28 +752,47 @@ local function MakeToggleButton()
 		return
 	end
 
+	-- ล้างปุ่มเก่าที่ค้างอยู่ (กันปุ่มซ้อนกันตอนรันสคริปต์ใหม่)
+	local function ClearOld(Parent)
+		if not Parent then
+			return
+		end
+		for _, Child in ipairs(Parent:GetChildren()) do
+			if Child.Name == "Delex Toggle" or Child.Name == "DelexToggle" then
+				Child:Destroy()
+			end
+		end
+	end
+	for _, Candidate in ipairs({ GuiParent, game:GetService("CoreGui") }) do
+		if Candidate then
+			ClearOld(Candidate)
+		end
+	end
+
 	local ToggleGui = Instance.new("ScreenGui")
-	ToggleGui.Name = "Delex Toggle"
+	ToggleGui.Name = "DelexToggle"
 	ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	ToggleGui.ResetOnSpawn = false
 	ToggleGui.DisplayOrder = 999
+	ToggleGui.IgnoreGuiInset = true
 
-	local ButtonSize = IsMobile() and 60 or 46
+	local ButtonSize = IsMobile() and 58 or 46
 
 	local SavedPos = getgenv().DelexTogglePos
-	local ToggleButton = Instance.new("TextButton")
+	local ToggleButton = Instance.new("ImageButton")
 	ToggleButton.Name = "ToggleButton"
 	ToggleButton.Parent = ToggleGui
-	ToggleButton.AnchorPoint = SavedPos and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5)
-	ToggleButton.Position = SavedPos or UDim2.new(0, 14, 0.62, 0)
+	ToggleButton.AnchorPoint = SavedPos and Vector2.new(0.5, 0.5) or Vector2.new(0, 0)
+	ToggleButton.Position = SavedPos or UDim2.new(0, 14, 0, 90)
 	ToggleButton.Size = UDim2.new(0, ButtonSize, 0, ButtonSize)
-	ToggleButton.BackgroundColor3 = Color3.fromRGB(10, 16, 26)
-	ToggleButton.BackgroundTransparency = 0.1
-	ToggleButton.BorderSizePixel = 2
-	ToggleButton.BorderColor3 = getgenv().UIColor["Border Color"]
+	ToggleButton.BackgroundColor3 = Color3.fromRGB(20, 24, 34)
+	ToggleButton.BackgroundTransparency = 0.15
+	ToggleButton.BorderSizePixel = 0
 	ToggleButton.AutoButtonColor = false
 	ToggleButton.Active = true
-	ToggleButton.Text = ""
+	ToggleButton.Image = ""
+	ToggleButton.ImageTransparency = 1
+	ToggleButton.ScaleType = Enum.ScaleType.Fit
 
 	local ToggleCorner = Instance.new("UICorner", ToggleButton)
 	ToggleCorner.CornerRadius = UDim.new(0, 14)
@@ -781,8 +800,8 @@ local function MakeToggleButton()
 	local ToggleStroke = Instance.new("UIStroke", ToggleButton)
 	ToggleStroke.Name = "DelexStroke"
 	ToggleStroke.Color = getgenv().UIColor["Border Color"]
-	ToggleStroke.Thickness = 1.5
-	ToggleStroke.Transparency = 0.2
+	ToggleStroke.Thickness = 2
+	ToggleStroke.Transparency = 0.1
 
 	local ToggleLogo = Instance.new("ImageLabel", ToggleButton)
 	ToggleLogo.Name = "Logo"
@@ -798,7 +817,7 @@ local function MakeToggleButton()
 		ToggleLogo.ScaleType = Enum.ScaleType.Crop
 	end
 
-	-- ถ้ารูปโลโก้โหลดไม่ขึ้น ให้เห็นตัวอักษรแทน (กันปุ่มกลายเป็นวงกลมเปล่า)
+	-- ถ้าโลโก้โหลดไม่ขึ้น ให้เห็นตัวอักษรแทน (กันปุ่มกลายเป็นวงกลมเปล่า)
 	ToggleLogo.Visible = ToggleLogo.Image ~= nil and tostring(ToggleLogo.Image) ~= ""
 	local FallbackText = Instance.new("TextLabel", ToggleButton)
 	FallbackText.Name = "FallbackText"
@@ -837,40 +856,49 @@ local function MakeToggleButton()
 	end
 	RefreshStateDot()
 
-	-- กด = พับ/กาง UI, ลาก = ย้ายตำแหน่ง (จำตำแหน่งไว้ใน session)
+	-- กดสั้น = พับ/กาง UI, กดค้างแล้วลาก = ย้ายตำแหน่ง
+	-- ใช้เวลากดเป็นตัวตัดสิน (แบบเดียวกับ UI อ้างอิง) ทนกว่าการวัดระยะลากบนจอสัมผัส
+	local Dragging = false
+	local DragInput = nil
 	local DragStart = nil
 	local DragOrigin = nil
-	local Moved = false
-	local TouchThreshold = IsMobile() and 12 or 4
+	local ClickStart = 0
+
+	local function UpdateDrag(Input)
+		local Delta = Input.Position - DragStart
+		ToggleButton.Position = UDim2.new(
+			DragOrigin.X.Scale, DragOrigin.X.Offset + Delta.X,
+			DragOrigin.Y.Scale, DragOrigin.Y.Offset + Delta.Y
+		)
+	end
 
 	ToggleButton.InputBegan:Connect(function(Input)
 		if Input.UserInputType ~= Enum.UserInputType.MouseButton1
 			and Input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
+		Dragging = true
+		ClickStart = os.clock()
 		DragStart = Input.Position
 		DragOrigin = ToggleButton.Position
-		Moved = false
+
+		Input.Changed:Connect(function()
+			if Input.UserInputState == Enum.UserInputState.End then
+				Dragging = false
+			end
+		end)
 	end)
 
 	ToggleButton.InputChanged:Connect(function(Input)
-		if not DragStart then
-			return
+		if Input.UserInputType == Enum.UserInputType.MouseMovement
+			or Input.UserInputType == Enum.UserInputType.Touch then
+			DragInput = Input
 		end
-		if Input.UserInputType ~= Enum.UserInputType.MouseMovement
-			and Input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-		local Delta = Input.Position - DragStart
-		if math.abs(Delta.X) + math.abs(Delta.Y) > TouchThreshold then
-			Moved = true
-		end
-		if Moved then
-			ToggleButton.AnchorPoint = Vector2.new(0.5, 0.5)
-			ToggleButton.Position = UDim2.new(
-				DragOrigin.X.Scale, DragOrigin.X.Offset + Delta.X,
-				DragOrigin.Y.Scale, DragOrigin.Y.Offset + Delta.Y
-			)
+	end)
+
+	game:GetService("UserInputService").InputChanged:Connect(function(Input)
+		if Dragging and DragInput and Input == DragInput then
+			UpdateDrag(Input)
 		end
 	end)
 
@@ -893,20 +921,29 @@ local function MakeToggleButton()
 		ToggleButton.Position = UDim2.fromOffset(X, Y)
 	end
 
-	local function EndDrag()
-		if not DragStart then
+	ToggleButton.InputEnded:Connect(function(Input)
+		if Input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and Input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
-		DragStart = nil
-		if Moved then
-			ClampToScreen()
-			getgenv().DelexTogglePos = ToggleButton.Position
-		else
+		Dragging = false
+
+		local Held = os.clock() - ClickStart
+		local Moved = false
+		pcall(function()
+			local Delta = Input.Position - DragStart
+			Moved = math.abs(Delta.X) + math.abs(Delta.Y) > 8
+		end)
+
+		if Held < 0.3 and not Moved then
+			-- ปล่อยเร็วและไม่ได้ลาก = คลิก สลับเปิด/ปิด
 			Library.ToggleUI()
 			RefreshStateDot()
+		else
+			ClampToScreen()
+			getgenv().DelexTogglePos = ToggleButton.Position
 		end
-		Moved = false
-	end
+	end)
 
 	-- ปิด/เปิดด้วยคีย์ลัดหรือปุ่มอื่น ก็ให้จุดสถานะอัปเดตตาม
 	if ToggleGui.AncestryChanged then
@@ -914,13 +951,6 @@ local function MakeToggleButton()
 			RefreshStateDot()
 		end)
 	end
-
-	ToggleButton.InputEnded:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1
-			or Input.UserInputType == Enum.UserInputType.Touch then
-			EndDrag()
-		end
-	end)
 
 	-- หมุนจอ/ย่อหน้าต่าง: ดึงปุ่มกลับเข้ากรอบ
 	local Camera = workspace.CurrentCamera
