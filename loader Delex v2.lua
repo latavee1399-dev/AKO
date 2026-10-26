@@ -12,16 +12,24 @@
 --   Separate Per Client = แต่ละ client แยกค่ากัน
 --   Link All Clients    = ทุก client ในโฟลเดอร์เกมใช้ค่าเดียวกัน
 --
+-- วิธีตั้งชื่อโฟลเดอร์เกม
+--   A) แก้ CONFIG.GameNames ด้านล่าง (ถาวร ใช้ได้ทุกเครื่อง)
+--   B) ตั้งก่อนโหลด loader (ไม่ต้องแก้ไฟล์บน GitHub):
+--        getgenv().DelexLoaderConfig = { GameName = "Durian Garden" }
+--        loadstring(game:HttpGet(url))()
+--   C) แก้ในเกม: Settings > Save Setting Config > Game Folder Name
+--   D) ปล่อยว่าง ระบบถาม Roblox API ให้เอง (เกมทั่วไปได้ชื่อจริง)
+--
 -- ข้อความที่แสดงในเกมต้องเป็นอังกฤษ เพราะฟอนต์ Roblox ไม่มีไทย
 -- ============================================================
 
 -- ============================================================
--- 0) CONFIG — แก้ตรงนี้ที่เดียว
+-- 0) CONFIG — ค่าเริ่มต้น (แก้ในไฟล์นี้ หรือส่งเข้ามาตอน loadstring ก็ได้)
 -- ============================================================
 local CONFIG = {
 	-- ตั้งชื่อโฟลเดอร์ของแต่ละเกมเอง: [PlaceId] = "ชื่อโฟลเดอร์"
 	-- เกมที่ไม่อยู่ในตารางนี้ ระบบจะหาชื่อจริงให้เอง (API -> game.Name -> Game_<PlaceId>)
-	-- ดู PlaceId ได้จาก print(game.PlaceId) หรือบรรทัด Folder: ในแท็บ Settings
+	-- ดู PlaceId ได้จาก print(game.PlaceId) หรือบรรทัด PlaceId ในแท็บ Settings
 	GameNames = {
 		[54849] = "Durian Garden",
 	},
@@ -35,6 +43,57 @@ local CONFIG = {
 	-- โฟลเดอร์รากของ config
 	RootFolder = "Delex",
 }
+
+-- ============================================================
+-- 0.1) ตั้งชื่อเกมจากภายนอก (ก่อน loadstring)
+--   getgenv().DelexLoaderConfig = { GameName = "Durian Garden" }
+--   loadstring(game:HttpGet(url))()
+-- หรือใช้ getgenv().Config = { GameName = "..." } ก็ได้
+-- มีผลกับโฟลเดอร์ของ "เกมที่กำลังเล่นอยู่" เท่านั้น
+-- ============================================================
+local function CollectOverride()
+	local Sources = {}
+
+	local OkGenv, GenvTable = pcall(function()
+		return getgenv and getgenv() or _G
+	end)
+	if OkGenv and type(GenvTable) == "table" then
+		table.insert(Sources, GenvTable.DelexLoaderConfig)
+		table.insert(Sources, GenvTable.Config)
+	end
+	table.insert(Sources, _G.DelexLoaderConfig)
+	table.insert(Sources, _G.Config)
+
+	for _, Candidate in ipairs(Sources) do
+		if type(Candidate) == "table" then
+			return Candidate
+		end
+	end
+	return nil
+end
+
+do
+	local User = CollectOverride()
+	if type(User) == "table" then
+		if type(User.GameName) == "string" and User.GameName ~= "" then
+			CONFIG.GameNames[game.PlaceId] = User.GameName
+		end
+		if type(User.GameNames) == "table" then
+			for PlaceId, Name in pairs(User.GameNames) do
+				CONFIG.GameNames[PlaceId] = Name
+			end
+		end
+		if User.SkipNameApi ~= nil then
+			CONFIG.SkipNameApi = User.SkipNameApi and true or false
+		end
+		if User.AppendPlaceId ~= nil then
+			CONFIG.AppendPlaceId = User.AppendPlaceId and true or false
+		end
+		if type(User.RootFolder) == "string" and User.RootFolder ~= "" then
+			CONFIG.RootFolder = User.RootFolder
+		end
+	end
+end
 
 -- ============================================================
 -- 1) compat shims (ทำงานก่อนทุกอย่าง)
@@ -253,6 +312,9 @@ local function StoreGameName(PlaceId, Name)
 end
 
 -- ชื่อแบบภายในของ Roblox เช่น "Ugc", "Ugc_91350038154849", "Place_123", "12345"
+-- เก็บที่มาของชื่อ เพื่อโชว์ใน UI ว่ามาจากไหน
+local GameNameSource = "unknown"
+
 local function LooksInternalName(Name)
 	local Text = tostring(Name or "")
 	if Text == "" then
@@ -335,12 +397,14 @@ local function ResolveGameName()
 	local Override = CONFIG.GameNames[game.PlaceId]
 		or CONFIG.GameNames[tostring(game.PlaceId)]
 	if type(Override) == "string" and Override ~= "" then
+		GameNameSource = "config"
 		return Sanitize(Override)
 	end
 
 	-- 2) ชื่อที่เคยตั้งไว้ในเกมนี้ (Delex/GameNames.json)
 	local Cached = NameCache[tostring(game.PlaceId)]
 	if type(Cached) == "string" and Cached ~= "" then
+		GameNameSource = "saved"
 		return Sanitize(Cached)
 	end
 
@@ -348,11 +412,13 @@ local function ResolveGameName()
 	if not CONFIG.SkipNameApi then
 		local FromApi = FetchGameNameFromApi()
 		if type(FromApi) == "string" and not LooksInternalName(FromApi) then
+			GameNameSource = "roblox api"
 			return Sanitize(FromApi)
 		end
 
 		local FromMarket = FetchGameNameFromMarketplace()
 		if type(FromMarket) == "string" and not LooksInternalName(FromMarket) then
+			GameNameSource = "marketplace"
 			return Sanitize(FromMarket)
 		end
 	end
@@ -360,15 +426,30 @@ local function ResolveGameName()
 	-- 4) game.Name
 	local FromGame = tostring(game.Name or "")
 	if not LooksInternalName(FromGame) then
+		GameNameSource = "game.name"
 		return Sanitize(FromGame)
 	end
 
 	-- 5) ไม่รู้อะไรเลย
+	GameNameSource = "fallback"
 	return "Game_" .. tostring(game.PlaceId)
 end
 
 LoadNameCache()
 local GameName = ResolveGameName()
+
+-- จำชื่อที่เจออัตโนมัติไว้ใน GameNames.json เพื่อไม่ต้องถามซ้ำในครั้งหน้า
+do
+	local Cached = NameCache[tostring(game.PlaceId)]
+	local HasOverride = CONFIG.GameNames[game.PlaceId] ~= nil
+		or CONFIG.GameNames[tostring(game.PlaceId)] ~= nil
+	if not HasOverride and (Cached == nil or Cached ~= GameName) then
+		local LooksAuto = GameName:match("^Game_%d+$") == nil
+		if LooksAuto then
+			pcall(StoreGameName, game.PlaceId, GameName)
+		end
+	end
+end
 local ClientName = PlayerName()
 
 -- ต่อ PlaceId ท้ายชื่อเสมอ กันเกมชื่อซ้ำกันเขียนทับกัน
@@ -1131,6 +1212,8 @@ local function PathText()
 	local Count = #ClientFiles()
 	local Lines = {
 		"Folder: " .. GameFolder,
+		"PlaceId: " .. tostring(game.PlaceId),
+		"Name from: " .. GameNameSource,
 		"Client: " .. ClientName .. " (" .. Executor .. ")",
 		"Files: " .. tostring(Count),
 		"File API: " .. CompatLine(),
@@ -1211,7 +1294,7 @@ SaveGroup:AddButton({
 -- ตั้งชื่อโฟลเดอร์เกมนี้เองได้ (บันทึกลง Delex/GameNames.json มีผลรอบถัดไป)
 SaveGroup:AddInput("GameFolderName", {
 	Text = "Game Folder Name",
-	Placeholder = "e.g. Durian Garden",
+	Placeholder = "e.g. Durian Garden (restart to apply)",
 	Default = GameName,
 	Callback = function(Value)
 		if Value == nil or Value == "" then
@@ -1220,12 +1303,17 @@ SaveGroup:AddInput("GameFolderName", {
 		local Saved = StoreGameName(game.PlaceId, Value)
 		Library:Notify({
 			Title = "Config",
-			Description = Saved and ("Folder name saved: " .. Sanitize(Value) .. " (restart to apply)") or "Save failed",
-			Duration = 4
+			Description = Saved
+				and ("Saved: " .. Sanitize(Value) .. " - restart script to apply")
+				or "Save failed (file API unavailable)",
+			Duration = 5
 		}, true)
 		PathLabel:SetText(PathText())
 	end
 })
+
+-- บอก PlaceId ให้เห็นชัด ๆ เพื่อเอาไปใส่ใน CONFIG.GameNames ของ loader
+SaveGroup:AddLabel("PlaceId of this game: " .. tostring(game.PlaceId))
 
 local InfoGroup = SettingsTab:AddRightGroupbox("Info")
 InfoGroup:AddLabel(
