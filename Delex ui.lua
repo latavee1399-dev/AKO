@@ -768,7 +768,9 @@ local function MakeToggleButton()
 	ToggleButton.Position = SavedPos or UDim2.new(0, 14, 0.62, 0)
 	ToggleButton.Size = UDim2.new(0, ButtonSize, 0, ButtonSize)
 	ToggleButton.BackgroundColor3 = Color3.fromRGB(10, 16, 26)
-	ToggleButton.BackgroundTransparency = 0.35
+	ToggleButton.BackgroundTransparency = 0.1
+	ToggleButton.BorderSizePixel = 2
+	ToggleButton.BorderColor3 = getgenv().UIColor["Border Color"]
 	ToggleButton.AutoButtonColor = false
 	ToggleButton.Active = true
 	ToggleButton.Text = ""
@@ -790,12 +792,26 @@ local function MakeToggleButton()
 	ToggleLogo.BackgroundTransparency = 1
 	ToggleLogo.Image = getgenv().UIColor["Logo Image"]
 	ToggleLogo.ScaleType = Enum.ScaleType.Fit
-
 	local LogoAspect = getgenv().UIColor["Logo Aspect"]
 	if LogoAspect and LogoAspect > 1.28 then
 		ToggleLogo.Size = UDim2.new(1, -2, 1, -2)
 		ToggleLogo.ScaleType = Enum.ScaleType.Crop
 	end
+
+	-- ถ้ารูปโลโก้โหลดไม่ขึ้น ให้เห็นตัวอักษรแทน (กันปุ่มกลายเป็นวงกลมเปล่า)
+	ToggleLogo.Visible = ToggleLogo.Image ~= nil and tostring(ToggleLogo.Image) ~= ""
+	local FallbackText = Instance.new("TextLabel", ToggleButton)
+	FallbackText.Name = "FallbackText"
+	FallbackText.AnchorPoint = Vector2.new(0.5, 0.5)
+	FallbackText.Position = UDim2.new(0.5, 0, 0.5, 0)
+	FallbackText.Size = UDim2.new(1, 0, 1, 0)
+	FallbackText.BackgroundTransparency = 1
+	FallbackText.Font = Enum.Font.GothamBlack
+	FallbackText.Text = "D"
+	FallbackText.TextSize = math.floor(ButtonSize * 0.45)
+	FallbackText.TextColor3 = getgenv().UIColor["Border Color"]
+	FallbackText.Visible = not ToggleLogo.Visible
+	FallbackText.ZIndex = 2
 
 	-- วงแหวนบอกสถานะ: เขียว = UI เปิดอยู่, จาง = UI ถูกพับไว้
 	local StateDot = Instance.new("Frame", ToggleButton)
