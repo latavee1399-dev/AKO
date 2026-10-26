@@ -995,13 +995,19 @@ end
 	local Concacmain = Instance.new("Frame")
 	local MainContainer
 
+	-- หน้าต่าง: ความสูงคิดเป็นสัดส่วนของจอ เพื่อให้พอดีทั้งคอมและมือถือ
+	local IsTouchDevice = game:GetService("UserInputService").TouchEnabled
+	local WindowWidth = math.min(700, math.floor(workspace.CurrentCamera.ViewportSize.X * 0.92))
+	local WindowHeight = math.floor(workspace.CurrentCamera.ViewportSize.Y * (IsTouchDevice and 0.62 or 0.72))
+	WindowHeight = math.clamp(WindowHeight, 320, 438)
+
 	Main.Name = "Main"
 	Main.Parent = Library_Function.Gui
 	Main.BackgroundColor3 = Color3.fromRGB(42, 42, 42)
 	Main.BackgroundTransparency = 1.000
 	Main.Position = UDim2.new(0.5, 0, 0.5, 0)
 	Main.AnchorPoint = Vector2.new(0.5, 0.5)
-	Main.Size = UDim2.new(0, 700, 0, 438)
+	Main.Size = UDim2.new(0, WindowWidth, 0, WindowHeight)
 
 	makeDraggable(Main, Main)
 
@@ -1579,8 +1585,29 @@ end
 			SectionList.SortOrder = Enum.SortOrder.LayoutOrder
 			SectionList.Padding = UDim.new(0, 5)
 
+			-- เนื้อหาเริ่มใต้หัวข้อ 34px (เว้นที่ให้ Topsec) และไม่ถูกตัดขอบ
+			local SectionPad = Instance.new("UIPadding", Section)
+			SectionPad.Name = "SectionPad"
+			SectionPad.PaddingTop = UDim.new(0, 34)
+			SectionPad.PaddingLeft = UDim.new(0, 5)
+			SectionPad.PaddingRight = UDim.new(0, 5)
+			SectionPad.PaddingBottom = UDim.new(0, 5)
+
 			local SizeSectionY
 			local sectionIsVisible = false
+
+			-- ปรับความสูงของ section จากเนื้อหาจริง (คำนวณหลายรอบเพราะข้อความตัดบรรทัดช้า)
+			local function RefreshSectionHeight()
+				local Target = SizeSectionY or 34
+				if Toggleable and not sectionIsVisible then
+					Target = 34
+				end
+				if math.abs(Section.Size.Y.Offset - Target) > 0.5 then
+					TweenService:Create(Section, TweenInfo.new(getgenv().UIColor["Tween Animation 1 Speed"]), {
+						Size = UDim2.new(1, -5, 0, Target)
+					}):Play()
+				end
+			end
 			if Toggleable then
 				local VisibilitySectionFrame = Instance.new("Frame")
 				local VisibilitySectionFrameCorner = Instance.new("UICorner")
@@ -1629,9 +1656,7 @@ end
 				visibility_off.ImageTransparency = 0
 
 				local function RefreshCollapse()
-					TweenService:Create(Section, TweenInfo.new(getgenv().UIColor["Tween Animation 1 Speed"]), {
-						Size = UDim2.new(1, -5, 0, sectionIsVisible and (SizeSectionY or 34) or 34)
-					}):Play()
+					RefreshSectionHeight()
 					visibility.ImageTransparency = sectionIsVisible and 0 or 1
 					visibility_off.ImageTransparency = sectionIsVisible and 1 or 0
 				end
@@ -1665,9 +1690,20 @@ end
 			end
 
 			SectionList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-				SizeSectionY = SectionList.AbsoluteContentSize.Y + 5
+				SizeSectionY = SectionList.AbsoluteContentSize.Y + 8
 				if not Toggleable or sectionIsVisible then
-					Section.Size = UDim2.new(1, -5, 0, SizeSectionY)
+					RefreshSectionHeight()
+				end
+			end)
+
+			-- label/toggle ที่ตัดบรรทัดจะสูงขึ้นหลัง event แรก จึงวัดซ้ำอีกรอบ
+			task.defer(function()
+				for _ = 1, 3 do
+					SizeSectionY = SectionList.AbsoluteContentSize.Y + 8
+					if not Toggleable or sectionIsVisible then
+						RefreshSectionHeight()
+					end
+					TaskWait(0.05)
 				end
 			end)
 
