@@ -54,8 +54,9 @@
 --   Use Delex.Bind.Toggle/Slider/Dropdown/Multi/Input/Keybind instead of calling
 --   Group:Add... directly. Signature: Delex.Bind.<Type>(Group, StableKey, Options).
 --   StableKey must be unique and should remain unchanged between script revisions.
---   Bind wrappers load defaults from saved Values and queue a JSON save after changes
---   (about 0.6 seconds). Options.Callback applies the value to the actual feature.
+--   Bind wrappers load defaults from saved Values, invoke feature callbacks during startup,
+--   and queue a JSON save after user changes (about 0.6 seconds). Options.Callback applies
+--   the initial saved/default value to the actual feature as soon as the control is created.
 --   Example:
 --     local Tab = Window:AddTab("Farm")
 --     local Group = Tab:AddLeftGroupbox("Farm")
@@ -841,10 +842,11 @@ local Bind = {}
 
 function Bind.Toggle(Group, Key, Option)
 	Option = Option or {}
+	local InitialValue = Config.Get(Key, Option.Default) == true
 	local Control = Group:AddToggle(Key, {
 		Text = Option.Text or Key,
 		Desc = Option.Desc,
-		Default = Config.Get(Key, Option.Default) == true,
+		Default = InitialValue,
 		Callback = function(Value)
 			Config.Set(Key, Value)
 			if Option.Callback then
@@ -855,16 +857,25 @@ function Bind.Toggle(Group, Key, Option)
 	Appliers[Key] = function(Value)
 		Control.SetStage(Value == true)
 	end
+	-- The UI library paints the default state but does not run its callback on creation.
+	-- Initialize the actual feature separately so saved-on toggles work after relaunch.
+	if Option.Callback then
+		local Ok, Err = pcall(Option.Callback, InitialValue)
+		if not Ok then
+			Log("toggle initialization failed:", Key, Err)
+		end
+	end
 	return Control
 end
 
 function Bind.Slider(Group, Key, Option)
 	Option = Option or {}
+	local InitialValue = Config.Get(Key, Option.Default) or 0
 	local Control = Group:AddSlider(Key, {
 		Text = Option.Text or Key,
 		Min = Option.Min or 0,
 		Max = Option.Max or 100,
-		Default = Config.Get(Key, Option.Default) or 0,
+		Default = InitialValue,
 		Rouding = Option.Rouding,
 		Callback = function(Value)
 			Config.Set(Key, Value)
@@ -876,16 +887,23 @@ function Bind.Slider(Group, Key, Option)
 	Appliers[Key] = function(Value)
 		Control.SetValue(Value)
 	end
+	if Option.Callback then
+		local Ok, Err = pcall(Option.Callback, InitialValue)
+		if not Ok then
+			Log("slider initialization failed:", Key, Err)
+		end
+	end
 	return Control
 end
 
 function Bind.Dropdown(Group, Key, Option)
 	Option = Option or {}
+	local InitialValue = Config.Get(Key, Option.Default)
 	local Control = Group:AddDropdown(Key, {
 		Text = Option.Text or Key,
 		SubText = Option.SubText,
 		Values = Option.Values,
-		Default = Config.Get(Key, Option.Default),
+		Default = InitialValue,
 		Callback = function(Value)
 			Config.Set(Key, Value)
 			if Option.Callback then
@@ -895,6 +913,12 @@ function Bind.Dropdown(Group, Key, Option)
 	})
 	Appliers[Key] = function(Value)
 		Control:SetValue(Value)
+	end
+	if InitialValue ~= nil and Option.Callback then
+		local Ok, Err = pcall(Option.Callback, InitialValue)
+		if not Ok then
+			Log("dropdown initialization failed:", Key, Err)
+		end
 	end
 	return Control
 end
@@ -937,15 +961,24 @@ function Bind.Multi(Group, Key, Option)
 			end
 		end
 	end
+	if Option.Callback then
+		for _, Name in ipairs(Saved) do
+			local Ok, Err = pcall(Option.Callback, Name, true)
+			if not Ok then
+				Log("multi-select initialization failed:", Key, Err)
+			end
+		end
+	end
 	return Control
 end
 
 function Bind.Input(Group, Key, Option)
 	Option = Option or {}
+	local InitialValue = Config.Get(Key, Option.Default)
 	local Control = Group:AddInput(Key, {
 		Text = Option.Text or Key,
 		Placeholder = Option.Placeholder,
-		Default = Config.Get(Key, Option.Default),
+		Default = InitialValue,
 		Callback = function(Value)
 			Config.Set(Key, Value)
 			if Option.Callback then
@@ -955,6 +988,12 @@ function Bind.Input(Group, Key, Option)
 	})
 	Appliers[Key] = function(Value)
 		Control.SetValue(Value)
+	end
+	if InitialValue ~= nil and Option.Callback then
+		local Ok, Err = pcall(Option.Callback, InitialValue)
+		if not Ok then
+			Log("input initialization failed:", Key, Err)
+		end
 	end
 	return Control
 end
@@ -1247,7 +1286,7 @@ ApplyFly = function(Enable)
 	local Root = GetRoot()
 	local Humanoid = GetHumanoid()
 	if not Root or not Humanoid then
-		PlayerState.Flying = false
+		-- Keep the requested state enabled; OnCharacterAdded will retry after spawn.
 		return
 	end
 
